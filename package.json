@@ -1,0 +1,16 @@
+{
+  "name": "swc-plugin-solid",
+  "version": "0.1.0",
+  "description": "",
+  "author": "",
+  "license": "ISC",
+  "keywords": [
+    "swc-plugin"
+  ],
+  "main": "target/wasm32-wasip1/release/swc_plugin_solid.wasm",
+  "scripts": {
+    "prepublishOnly": "cargo build-wasip1 --release"
+  },
+  "files": [],
+  "preferUnplugged": true
+}
