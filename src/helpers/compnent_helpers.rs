@@ -1,13 +1,25 @@
+use swc_core::ecma::ast::JSXElementName;
+
 use crate::transform::parent_visitor::ParentVisitor;
 
 // Check if this is a dom component or JSX component
 // Uses the rule of thumb that JSX components start
 // with a capital letter
-pub fn is_solid_component(name: &str) -> bool {
-    if name.len() > 0 {
-        name.as_bytes()[0].is_ascii_uppercase()
-    } else {
-        false
+pub fn is_solid_component(name: &JSXElementName) -> (bool, String) {
+    match name {
+        JSXElementName::Ident(n) => {
+            let nm: String = n.sym.as_str().into();
+            if nm.len() > 0 {
+                (n.sym.as_bytes()[0].is_ascii_uppercase(), nm)
+            } else {
+                (false, nm)
+            }
+        }
+        JSXElementName::JSXMemberExpr(n) => (true, n.prop.sym.as_str().into()),
+        JSXElementName::JSXNamespacedName(n) => (
+            false,
+            format!("{0}:{1}", n.ns.sym.as_str(), n.name.sym.as_str()),
+        ),
     }
 }
 
