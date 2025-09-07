@@ -21,23 +21,25 @@ pub enum CreateNewExprError {
     NoChangeNeeded,
     ExprNotFound,
 }
-enum PossibleOption<T> {
-    Raw(T),
-    Wrapped(Option<T>),
+enum PossibleOption<'a, T> {
+    Raw(&'a Box<T>),
+    Wrapped(Option<&'a Box<T>>),
+    MutRef(&'a mut T),
 }
 // This result contins the new expr + a bool marking if the new expr needs to be traversed
 // It will need to do that if there is some nested JSX that this fn will not parse out
 type Res = Result<(Box<Expr>, bool), CreateNewExprError>;
 fn create_new_expr_possible<T: ParentVisitor>(
-    old_val: PossibleOption<&Box<Expr>>,
+    old_val: PossibleOption<Expr>,
     attacher: &mut T,
 ) -> Res {
     let unwrapped = match old_val {
-        PossibleOption::Raw(x) => x,
-        PossibleOption::Wrapped(x) => x.ok_or(CreateNewExprError::ExprNotFound)?,
+        PossibleOption::Raw(x) => &**x,
+        PossibleOption::Wrapped(x) => &**(x.ok_or(CreateNewExprError::ExprNotFound)?),
+        PossibleOption::MutRef(x) => x,
     };
     // Bizarre syntax and feels wrong, but does work :(
-    match &**unwrapped {
+    match unwrapped {
         Expr::JSXElement(e) => Ok(e.visit_and_build_from_jsx(attacher)),
         Expr::JSXFragment(e) => {
             if e.children.len() == 1 {
@@ -77,6 +79,8 @@ fn create_new_expr_possible<T: ParentVisitor>(
                 Ok((Box::new(Expr::Array(arr)), true))
             }
         }
+        /*
+         * With the generic 'expr' visitor these are redundant. That visitor will do this for us
         Expr::Paren(e) => {
             // Returns an expr so ideall we would recurse into it to see if
             // we can find a JSX expression.
@@ -110,6 +114,7 @@ fn create_new_expr_possible<T: ParentVisitor>(
             let new_expr = Expr::Array(arr);
             Ok((Box::new(new_expr), any_recurse))
         }
+         */
         _ => {
             // The new expr is the old expr. Just return None;
             Err(CreateNewExprError::NoChangeNeeded)
@@ -124,4 +129,8 @@ pub fn create_new_expr_option<T: ParentVisitor>(
 }
 pub fn create_new_expr<T: ParentVisitor>(old_val: &Box<Expr>, attacher: &mut T) -> Res {
     create_new_expr_possible(PossibleOption::Raw(old_val), attacher)
+}
+
+pub fn create_new_expr_mut<T: ParentVisitor>(old_val: &mut Expr, attacher: &mut T) -> Res {
+    create_new_expr_possible(PossibleOption::MutRef(old_val), attacher)
 }

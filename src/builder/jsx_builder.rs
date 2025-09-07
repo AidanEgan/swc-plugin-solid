@@ -4,7 +4,8 @@ use swc_core::ecma::{
 };
 
 use crate::builder::client::{
-    jsx_expr_builder_client::build_js_from_client_jsx, jsx_parser_client::ClientJsxElementVisitor,
+    jsx_expr_builder_client::{build_js_from_client_jsx, standard_build_res_wrappings},
+    jsx_parser_client::ClientJsxElementVisitor,
 };
 
 use crate::transform::parent_visitor::ParentVisitor;
@@ -16,8 +17,6 @@ pub enum ParsedJsxData {
     Universal,
     Hydration,
 }
-
-const TEMPLATE_BASE: &str = "_templ$";
 
 pub trait JsxBuilder {
     fn visit_and_build_from_jsx<T: ParentVisitor>(
@@ -75,7 +74,7 @@ fn build_from_jsx<T>(data: ParsedJsxData, parent_visitor: &mut T) -> (Box<Expr>,
 where
     T: ParentVisitor,
 {
-    let res = match &data {
+    let res = match data {
         ParsedJsxData::Server => {
             todo!("Do SSR (later :))");
         }
@@ -87,12 +86,10 @@ where
         }
         ParsedJsxData::Client(parsed_data) => {
             // Attach parent stuff to parent visitor
-            let built = build_js_from_client_jsx(parsed_data);
-            (Box::new(built), parsed_data.needs_revisit)
+            let needs_revisit = parsed_data.needs_revisit;
+            let built = build_js_from_client_jsx(parsed_data, parent_visitor);
+            (built, needs_revisit)
         }
     };
-    // Attach relevant data to parent visitor
-    // Done here b/c data is moved in this operation
-    parent_visitor.attach_data(data);
-    res
+    (standard_build_res_wrappings(res.0), res.1)
 }

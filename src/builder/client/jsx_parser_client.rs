@@ -1,35 +1,37 @@
 use super::super::parser_types::{JsxOpeningMetadata, JsxTemplateKind, PossiblePlaceholders};
+use super::jsx_expr_parser_client::ClientJsxExprParser;
+use super::jsx_expr_parser_client::TransformedExprRes;
+use crate::builder::parser_types::JsxFragmentMetadata;
 use crate::helpers::compnent_helpers::is_solid_component;
-use swc_core::common::{SyntaxContext, DUMMY_SP};
-use swc_core::ecma::ast::{
-    ArrowExpr, BlockStmtOrExpr, Callee, Expr, JSXElement, JSXExpr, JSXFragment, Lit,
-};
+use swc_core::ecma::ast::{JSXElement, JSXFragment};
 use swc_core::ecma::visit::{Visit, VisitWith};
 
 // Logic for elements and fragments will be similar - use this for both
 
-fn wrap_expr_with_arrow(old_expr: Box<Expr>) -> Expr {
-    let new_expr = ArrowExpr {
-        // New nodes got no span
-        span: DUMMY_SP,
-        // The syntax context. For new nodes, this should be empty.
-        ctxt: SyntaxContext::empty(),
-        params: Vec::with_capacity(0),
-        body: Box::new(BlockStmtOrExpr::Expr(old_expr)),
-        is_async: false,
-        is_generator: false,
-        type_params: None,
-        return_type: None,
-    };
-    Expr::Arrow(new_expr)
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct ClientJsxElementVisitor {
     placeholder_count: usize,
-    pub template: Vec<JsxTemplateKind<ClientJsxElementVisitor>>,
+    pub template: Vec<JsxTemplateKind>,
     pub needs_revisit: bool,
-    pub placeholders: Vec<PossiblePlaceholders<ClientJsxElementVisitor>>,
+    // Option used so placeholders can be moved out of vec more easily
+    pub placeholders: Vec<Option<PossiblePlaceholders<ClientJsxElementVisitor>>>,
+}
+
+impl ClientJsxElementVisitor {
+    fn add_data_from_expr(&mut self, data: TransformedExprRes) {
+        match data {
+            TransformedExprRes::NewExpr(transformed_expr) => {
+                self.template
+                    .push(JsxTemplateKind::Placeholder(self.placeholder_count));
+                self.placeholders
+                    .push(Some(PossiblePlaceholders::Expression(transformed_expr)));
+                self.placeholder_count += 1;
+            }
+            TransformedExprRes::NewTmpl(transformed_tmpl) => {
+                self.template.push(transformed_tmpl);
+            }
+        }
+    }
 }
 
 impl Visit for ClientJsxElementVisitor {
@@ -42,12 +44,33 @@ impl Visit for ClientJsxElementVisitor {
         }
     }
     fn visit_jsx_fragment(&mut self, node: &JSXFragment) {
-        todo!("Basically the same");
+        let mut needs_revisit = false;
+        /*
+         * Each child is visited separately w/ its own visitor
+         */
+        let children = node
+            .children
+            .iter()
+            .map(|child| {
+                let mut new_visitor = ClientJsxElementVisitor::new();
+                child.visit_with(&mut new_visitor);
+                needs_revisit = needs_revisit || new_visitor.needs_revisit;
+                new_visitor
+            })
+            .collect();
+        self.template
+            .push(JsxTemplateKind::Placeholder(self.placeholder_count));
+        self.placeholders
+            .push(Some(PossiblePlaceholders::Fragment(JsxFragmentMetadata {
+                children,
+                needs_revisit,
+            })));
+        self.placeholder_count += 1;
     }
     fn visit_jsx_opening_element(&mut self, node: &swc_core::ecma::ast::JSXOpeningElement) {
         let (is_custom_component, name) = is_solid_component(&node.name);
         if is_custom_component {
-            todo!("Create component placeholder")
+            todo!("Create component placeholder -- check for builtins")
         } else {
             // Done here to avoid extra clone if not needed
             let close = if node.self_closing {
@@ -71,63 +94,39 @@ impl Visit for ClientJsxElementVisitor {
     /* Possible JSX Element childs (along with JSX Element/JSX Fragment) */
 
     fn visit_jsx_expr_container(&mut self, node: &swc_core::ecma::ast::JSXExprContainer) {
-        let mut transformed_expr: Option<Expr> = None;
-        match &node.expr {
-            JSXExpr::JSXEmptyExpr(_) => {
-                // We can just ignore it
-                return;
-            }
-            JSXExpr::Expr(e) => {
-                match &**e {
-                    Expr::Lit(lit_exp) => match lit_exp {
-                        Lit::Str(string_lit) => {
-                            self.template
-                                .push(JsxTemplateKind::Text(string_lit.value.as_str().into()));
-                        }
-                        Lit::Num(num_lit) => {
-                            self.template
-                                .push(JsxTemplateKind::Text(num_lit.value.to_string()));
-                        }
-                        _ => {
-                            transformed_expr = Some(*e.clone());
-                        }
-                    },
-                    Expr::Call(call_expr) => {
-                        // Optimize by just calling wiht callee
-                        if call_expr.args.len() == 0 {
-                            match &call_expr.callee {
-                                Callee::Expr(expr) => {
-                                    // Revist all expressions that aren't just a simple ident expr
-                                    self.needs_revisit = self.needs_revisit || !expr.is_ident();
-                                    transformed_expr = Some(*expr.clone());
-                                }
-                                _ => { /* Will just do the generic expr transform */ }
-                            }
-                        }
-                    }
-                    _ => { /* Will just do the generic expr transform */ }
-                };
-                if transformed_expr.is_none() {
-                    transformed_expr = Some(wrap_expr_with_arrow(e.clone()))
-                }
-            }
-        }
-        if let Some(transformed_expr) = transformed_expr {
-            self.template
-                .push(JsxTemplateKind::Placeholder(self.placeholder_count));
-            self.placeholders
-                .push(PossiblePlaceholders::Expression(transformed_expr));
-            self.placeholder_count += 1;
+        let mut expr_visitor: ClientJsxExprParser = ClientJsxExprParser::new();
+        node.expr.visit_with(&mut expr_visitor);
+        if let Some(res) = expr_visitor.result {
+            self.add_data_from_expr(res);
         }
     }
 
+    fn visit_jsx_text(&mut self, node: &swc_core::ecma::ast::JSXText) {
+        // Just get rid of newlines because they will be a problem for the template
+        // POSSIBLE OPTIMIZATION: Could just 'trim' the string and omit empty JSX Text values?
+        let transformed = node.value.replace(['\n', '\r'], "");
+        self.template.push(JsxTemplateKind::Text(transformed));
+    }
+
+    /* Nothing to do?
     fn visit_jsx_element_child(&mut self, node: &swc_core::ecma::ast::JSXElementChild) {
         todo!("PLEASE DO")
     }
+    */
 
+    // Need to "unspread" it
     fn visit_jsx_spread_child(&mut self, node: &swc_core::ecma::ast::JSXSpreadChild) {
-        todo!("DO")
+        let mut expr_visitor: ClientJsxExprParser = ClientJsxExprParser::new();
+        node.expr.visit_with(&mut expr_visitor);
+        if let Some(res) = expr_visitor.result {
+            self.add_data_from_expr(res);
+        }
     }
+    /* Not sure if there is anything special to do here
+    fn visit_jsx_member_expr(&mut self, node: &swc_core::ecma::ast::JSXMemberExpr) {
+
+    }
+    */
 }
 
 impl ClientJsxElementVisitor {
