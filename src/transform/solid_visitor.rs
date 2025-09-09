@@ -2,11 +2,12 @@ use super::CreateNewExprError;
 use crate::builder::jsx_builder::ParsedJsxData;
 use crate::transform::create_new_expr_mut;
 use crate::transform::parent_visitor::ParentVisitor;
+use crate::transform::postprocess::{add_imports, create_template_declarations};
 use crate::{config::PluginArgs, helpers::should_skip::should_skip};
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use swc_core::common::Spanned;
-use swc_core::ecma::ast::{BlockStmtOrExpr, ExprOrSpread};
+use swc_core::ecma::ast::{Decl, ModuleItem, Program, Stmt};
 use swc_core::ecma::visit::VisitMutWith;
 use swc_core::{
     common::{comments::Comments, SourceMapper},
@@ -19,9 +20,11 @@ pub struct SolidJsVisitor<C: Clone + Comments, S: SourceMapper> {
     source_map: std::sync::Arc<S>,
     comments: C,
     options: PluginArgs,
-    filename: String,
-    templates: HashMap<String, usize>,
+    // HashMap would be more efficient, but for testing purposes
+    // I want templates to have a predictable order
+    templates: BTreeMap<String, usize>,
     events: HashSet<String>,
+    imports: HashSet<String>,
     element_count: usize,
     template_count: usize,
 }
@@ -69,21 +72,16 @@ impl<C: Clone + Comments, S: SourceMapper> ParentVisitor for SolidJsVisitor<C, S
 }
 
 impl<C: Clone + Comments, S: SourceMapper> SolidJsVisitor<C, S> {
-    pub fn new(
-        source_map: std::sync::Arc<S>,
-        comments: C,
-        plugin_options: PluginArgs,
-        filename: &str,
-    ) -> Self {
+    pub fn new(source_map: std::sync::Arc<S>, comments: C, plugin_options: PluginArgs) -> Self {
         SolidJsVisitor {
             source_map,
             comments,
             options: plugin_options,
-            filename: filename.to_string(),
             template_count: 0,
             element_count: 0,
-            templates: HashMap::new(),
+            templates: BTreeMap::new(),
             events: HashSet::new(),
+            imports: HashSet::new(),
         }
     }
 }
@@ -104,9 +102,39 @@ impl<C: Clone + Comments, S: SourceMapper> VisitMut for SolidJsVisitor<C, S> {
         }
 
         node.visit_mut_children_with(self);
-
         // Post-process
         // See: https://github.com/ryansolid/dom-expressions/blob/main/packages/babel-plugin-jsx-dom-expressions/src/shared/postprocess.js
+        let has_templates = !self.templates.is_empty();
+        let mut imports_vec = add_imports(
+            &mut self.imports,
+            has_templates,
+            self.options.module_name.clone(),
+        );
+        if has_templates {
+            let decl = create_template_declarations(&mut self.templates);
+            imports_vec.push(ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(decl)))));
+        }
+        // Have to insert these statements at the start - O(n) operation ugh
+        match node {
+            Program::Module(module) => {
+                imports_vec.extend(module.body.drain(..));
+                module.body = imports_vec;
+            }
+            Program::Script(script) => {
+                script.body = imports_vec
+                    .into_iter()
+                    // Lazy, not great way to just pull out templates
+                    .filter_map(|x| {
+                        if let ModuleItem::Stmt(s) = x {
+                            Some(s)
+                        } else {
+                            None
+                        }
+                    })
+                    .chain(script.body.drain(..))
+                    .collect();
+            }
+        }
     }
 
     fn visit_mut_expr(&mut self, node: &mut swc_core::ecma::ast::Expr) {

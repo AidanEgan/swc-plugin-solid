@@ -2,7 +2,7 @@ use super::super::parser_types::{JsxOpeningMetadata, JsxTemplateKind, PossiblePl
 use super::jsx_expr_parser_client::ClientJsxExprParser;
 use super::jsx_expr_parser_client::TransformedExprRes;
 use crate::builder::parser_types::JsxFragmentMetadata;
-use crate::helpers::compnent_helpers::is_solid_component;
+use crate::helpers::component_helpers::is_solid_component;
 use swc_core::ecma::ast::{JSXElement, JSXFragment};
 use swc_core::ecma::visit::{Visit, VisitWith};
 
@@ -35,13 +35,10 @@ impl ClientJsxElementVisitor {
 }
 
 impl Visit for ClientJsxElementVisitor {
-    fn visit_jsx_element(&mut self, node: &JSXElement) {
-        node.opening.visit_with(self);
-        node.visit_children_with(self);
-        if node.closing.is_some() {
-            // Unwrap is safe here!
-            node.closing.as_ref().unwrap().visit_with(self);
-        }
+    fn visit_jsx_closing_element(&mut self, node: &swc_core::ecma::ast::JSXClosingElement) {
+        // Does it matter here??? I
+        let (_is_custom_component, name) = is_solid_component(&node.name);
+        self.template.push(JsxTemplateKind::Closing(name));
     }
     fn visit_jsx_fragment(&mut self, node: &JSXFragment) {
         let mut needs_revisit = false;

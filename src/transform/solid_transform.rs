@@ -7,7 +7,6 @@ pub fn create_solidjs_visitor<C: Clone + Comments, S: SourceMapper>(
     source_map: std::sync::Arc<S>,
     comments: C,
     plugin_options: PluginArgs,
-    filename: &str,
 ) -> SolidJsVisitor<C, S> {
     /*
     * Would this be more performant? Documentation is sparse
@@ -16,5 +15,5 @@ pub fn create_solidjs_visitor<C: Clone + Comments, S: SourceMapper>(
            true,
        )
     */
-    SolidJsVisitor::new(source_map, comments, plugin_options, filename)
+    SolidJsVisitor::new(source_map, comments, plugin_options)
 }
