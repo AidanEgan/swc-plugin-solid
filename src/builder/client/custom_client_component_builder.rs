@@ -184,26 +184,6 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
             self.parsed_props
                 .push(ParsedPropsOrSpread::Props(parsed_prop_slice))
         }
-        println!("Debug: {:?}", self.metadata.children);
-
-        /*
-        *
-        * let arr = ArrayLit {
-            span: DUMMY_SP,
-            elems: frag
-                .children
-                .into_iter()
-                .map(|child| {
-                    let mut build_res = build_js_from_client_jsx(child, parent_visitor);
-                    memo_call_expr_mut(&mut build_res);
-                    Some(ExprOrSpread {
-                        spread: None,
-                        expr: standard_build_res_wrappings(build_res),
-                    })
-                })
-                .collect(),
-        };
-        */
 
         let mut children: Vec<Box<Expr>> = self
             .metadata
@@ -246,16 +226,18 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
         }
     }
 
-    fn create_props_obj(&mut self) -> Option<Box<Expr>> {
+    fn create_props_obj(&mut self) -> Box<Expr> {
         // Use mergeprops if necessary
         // build props object
         // make transformations -> specifically for ref
         let mut prop_builder = ElementPropertiesBuilder::new(0); // TODO ADD PARENT VIS CNT
         let res = if self.needs_merge_props {
+            let merge_props = generate_merge_props();
+            self.parent_visitor.add_import(merge_props.as_str().into());
             let merge_props_expr = Expr::Call(CallExpr {
                 span: DUMMY_SP,
                 ctxt: SyntaxContext::empty(),
-                callee: ident_callee(generate_merge_props()),
+                callee: ident_callee(merge_props),
                 type_args: None,
                 args: self
                     .parsed_props
@@ -268,15 +250,15 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
                     })
                     .collect(),
             });
-            Some(Box::new(merge_props_expr))
+            Box::new(merge_props_expr)
         } else {
             // Should have length of 1
             match self.parsed_props.pop() {
                 Some(ParsedPropsOrSpread::Props(items)) => {
-                    Some(build_props_oject_expr(items, &mut prop_builder).into())
+                    build_props_oject_expr(items, &mut prop_builder).into()
                 }
-                Some(ParsedPropsOrSpread::Spread(expr)) => Some(expr.into()),
-                None => None,
+                Some(ParsedPropsOrSpread::Spread(expr)) => expr.into(),
+                None => Box::new(Expr::Object(ObjectLit::default())),
             }
         };
         // TODO: ADD PROP BUILDER STUFF TO PARENT@
@@ -285,15 +267,17 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
 
     pub fn build_and_wrap_custom_component(&mut self) -> Box<Expr> {
         self.parse_all_props();
-        let mut args: Vec<ExprOrSpread> =
-            vec![ident_expr(self.metadata.value.as_str().into()).into()];
-        if let Some(res) = self.create_props_obj() {
-            args.push(res.into());
-        }
+        let args: Vec<ExprOrSpread> = vec![
+            ident_expr(self.metadata.value.as_str().into()).into(),
+            self.create_props_obj().into(),
+        ];
+        let create_component = generate_create_component_name();
+        self.parent_visitor
+            .add_import(create_component.as_str().into());
         Box::new(Expr::Call(CallExpr {
             span: DUMMY_SP,
             ctxt: SyntaxContext::empty(),
-            callee: ident_callee(generate_create_component_name()),
+            callee: ident_callee(create_component),
             args,
             type_args: None,
         }))

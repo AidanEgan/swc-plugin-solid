@@ -5,7 +5,7 @@ use crate::transform::parent_visitor::ParentVisitor;
 use crate::transform::postprocess::{add_imports, create_template_declarations};
 use crate::{config::PluginArgs, helpers::should_skip::should_skip};
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use swc_core::common::Spanned;
 use swc_core::ecma::ast::{Decl, ModuleItem, Program, Stmt};
 use swc_core::ecma::visit::VisitMutWith;
@@ -24,7 +24,8 @@ pub struct SolidJsVisitor<C: Clone + Comments, S: SourceMapper> {
     // I want templates to have a predictable order
     templates: HashMap<String, usize>,
     events: HashSet<String>,
-    imports: HashSet<String>,
+    // Want to guarantee order (mostly for tests)
+    imports: BTreeSet<String>,
     element_count: usize,
     template_count: usize,
 }
@@ -69,6 +70,11 @@ impl<C: Clone + Comments, S: SourceMapper> ParentVisitor for SolidJsVisitor<C, S
     fn element_count(&mut self) -> &mut usize {
         &mut self.element_count
     }
+    fn add_import(&mut self, import_name: Cow<str>) {
+        if !self.imports.contains(import_name.as_ref()) {
+            self.imports.insert(import_name.into_owned());
+        }
+    }
 }
 
 impl<C: Clone + Comments, S: SourceMapper> SolidJsVisitor<C, S> {
@@ -81,7 +87,7 @@ impl<C: Clone + Comments, S: SourceMapper> SolidJsVisitor<C, S> {
             element_count: 0,
             templates: HashMap::new(),
             events: HashSet::new(),
-            imports: HashSet::new(),
+            imports: BTreeSet::new(),
         }
     }
 }

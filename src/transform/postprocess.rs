@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use swc_core::{
     atoms::Atom,
@@ -86,7 +86,7 @@ fn generic_import(name: Atom, module_name: &str) -> ModuleItem {
 }
 
 pub fn add_imports(
-    imports: &mut HashSet<String>,
+    imports: &mut BTreeSet<String>,
     has_templates: bool,
     module_name: String,
 ) -> Vec<ModuleItem> {
@@ -95,9 +95,10 @@ pub fn add_imports(
         let import_stmt = generic_import(generate_template_expr_name(), &module_name);
         stmts.push(import_stmt);
     }
+
     stmts.extend(
-        imports
-            .drain()
+        std::mem::take(imports)
+            .into_iter()
             .map(|imp| generic_import(imp.into(), &module_name)),
     );
     stmts
