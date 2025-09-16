@@ -22,8 +22,8 @@ pub enum CreateNewExprError {
     ExprNotFound,
 }
 enum PossibleOption<'a, T> {
-    Raw(&'a Box<T>),
-    Wrapped(Option<&'a Box<T>>),
+    Raw(&'a mut Box<T>),
+    Wrapped(Option<&'a mut Box<T>>),
     MutRef(&'a mut T),
 }
 // This result contins the new expr + a bool marking if the new expr needs to be traversed
@@ -34,8 +34,8 @@ fn create_new_expr_possible<T: ParentVisitor>(
     attacher: &mut T,
 ) -> Res {
     let unwrapped = match old_val {
-        PossibleOption::Raw(x) => &**x,
-        PossibleOption::Wrapped(x) => &**(x.ok_or(CreateNewExprError::ExprNotFound)?),
+        PossibleOption::Raw(x) => &mut **x,
+        PossibleOption::Wrapped(x) => &mut **(x.ok_or(CreateNewExprError::ExprNotFound)?),
         PossibleOption::MutRef(x) => x,
     };
     // Bizarre syntax and feels wrong, but does work :(
@@ -122,12 +122,12 @@ fn create_new_expr_possible<T: ParentVisitor>(
     }
 }
 pub fn create_new_expr_option<T: ParentVisitor>(
-    old_val: Option<&Box<Expr>>,
+    old_val: Option<&mut Box<Expr>>,
     attacher: &mut T,
 ) -> Res {
     create_new_expr_possible(PossibleOption::Wrapped(old_val), attacher)
 }
-pub fn create_new_expr<T: ParentVisitor>(old_val: &Box<Expr>, attacher: &mut T) -> Res {
+pub fn create_new_expr<T: ParentVisitor>(old_val: &mut Box<Expr>, attacher: &mut T) -> Res {
     create_new_expr_possible(PossibleOption::Raw(old_val), attacher)
 }
 

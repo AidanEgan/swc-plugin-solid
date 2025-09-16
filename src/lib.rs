@@ -93,10 +93,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn basic_template_test_js() {
+    fn basic_test(input: &str, output: &str, is_ts: bool) {
         test_fixture(
-            get_syntax(false),
+            get_syntax(is_ts),
             &|t| {
                 visit_mut_pass(create_solidjs_visitor(
                     t.cm.clone(),
@@ -104,8 +103,8 @@ mod tests {
                     options(),
                 ))
             },
-            Path::new("tests/basic/input.jsx"),
-            Path::new("tests/basic/output.js"),
+            Path::new(input),
+            Path::new(output),
             FixtureTestConfig {
                 sourcemap: false,
                 allow_error: false,
@@ -115,23 +114,30 @@ mod tests {
     }
 
     #[test]
+    fn basic_template_test_js() {
+        basic_test("tests/basic/input.jsx", "tests/basic/output.js", false);
+    }
+
+    #[test]
     fn basic_template_test_ts() {
-        test_fixture(
-            get_syntax(true),
-            &|t| {
-                visit_mut_pass(create_solidjs_visitor(
-                    t.cm.clone(),
-                    t.comments.clone(),
-                    options(),
-                ))
-            },
-            Path::new("tests/basic/input.tsx"),
-            Path::new("tests/basic/output.ts"),
-            FixtureTestConfig {
-                sourcemap: false,
-                allow_error: false,
-                module: Some(true),
-            },
+        basic_test("tests/basic/input.tsx", "tests/basic/output.ts", true);
+    }
+
+    #[test]
+    fn basic_custom_component() {
+        basic_test(
+            "tests/basic/custom.jsx",
+            "tests/basic/custom_output.js",
+            false,
+        );
+    }
+
+    #[test]
+    fn complex_custom_component() {
+        basic_test(
+            "tests/basic/custom_complex.jsx",
+            "tests/basic/custom_complex_output.js",
+            false,
         );
     }
 }

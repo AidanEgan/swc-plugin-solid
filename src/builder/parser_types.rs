@@ -1,6 +1,7 @@
-use std::collections::HashMap;
-
-use swc_core::ecma::ast::Expr;
+use swc_core::{
+    atoms::Atom,
+    ecma::ast::{Expr, JSXAttrOrSpread},
+};
 
 /*
 pub struct Attrs {
@@ -9,18 +10,15 @@ pub struct Attrs {
 */
 #[derive(Debug, Clone, Default)]
 pub struct JsxOpeningMetadata {
-    pub attrs: HashMap<String, String>,
-    pub styles: HashMap<String, String>,
-    pub events: HashMap<String, Expr>, // Might just have to clone expr :(
+    // Spread elements have no 'key'
+    pub attrs: Vec<(Option<Atom>, JSXAttrOrSpread)>,
     pub value: String,
 }
 
 impl JsxOpeningMetadata {
     pub fn new(value: String) -> Self {
         Self {
-            attrs: HashMap::new(),
-            styles: HashMap::new(),
-            events: HashMap::new(),
+            attrs: Vec::new(),
             value,
         }
     }
@@ -29,7 +27,7 @@ impl JsxOpeningMetadata {
 #[derive(Debug, Clone, Default)]
 pub struct JsxCustomComponentMetadata<T: Clone> {
     pub value: String,
-    pub props: HashMap<String, Expr>, // Might just have to clone expr :(
+    pub props: Vec<(Option<Atom>, JSXAttrOrSpread)>, // Might just have to clone expr :(
     pub children: Vec<T>,
     pub needs_revisit: bool, // Might needs swc to re-evaluate expressions in props
     pub is_builtin: bool,    // Users can provide list of builtin components which we need to import
@@ -53,6 +51,6 @@ pub enum JsxTemplateKind {
 #[derive(Debug, Clone)]
 pub enum PossiblePlaceholders<T: Clone> {
     Component(JsxCustomComponentMetadata<T>),
-    Expression(Expr),
+    Expression(Box<Expr>),
     Fragment(JsxFragmentMetadata<T>), // Each child will be visited separately
 }

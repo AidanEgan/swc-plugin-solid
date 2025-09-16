@@ -5,20 +5,22 @@ use crate::{
         builder_types::Kind,
         client::{
             block_expr_builder::BlockExprBuilder,
-            builder_helpers::{block_to_call_expr, id_to_call_expr, name_as_expr},
+            builder_helpers::{
+                block_to_call_expr, id_to_call_expr, wrap_in_empty_arrow, wrap_with_memo,
+            },
+            custom_client_component_builder::ClientCustomComponentBuilder,
             insert_queue::{InsertBuilder, InsertQueue, PossibleInsert},
         },
-        parser_types::{JsxCustomComponentMetadata, JsxFragmentMetadata, PossiblePlaceholders},
+        parser_types::{JsxFragmentMetadata, PossiblePlaceholders},
     },
-    helpers::generate_var_names::{generate_create_component_name, generate_template_name},
+    helpers::generate_var_names::generate_template_name,
     transform::parent_visitor::ParentVisitor,
 };
 
 use swc_core::{
-    common::{SyntaxContext, DUMMY_SP},
+    common::{util::take::Take, SyntaxContext, DUMMY_SP},
     ecma::ast::{
-        ArrayLit, BlockStmt, CallExpr, Callee, Expr, ExprOrSpread, GetterProp, Ident, IdentName,
-        KeyValueProp, ObjectLit, Prop, PropName, PropOrSpread, ReturnStmt, Stmt,
+        ArrayLit, BlockStmt, BlockStmtOrExpr, CallExpr, Callee, Expr, ExprOrSpread, Ident,
     },
 };
 
@@ -58,135 +60,27 @@ fn add_opening(
     *templ_string += ">";
 }
 
-fn create_component_expr<T: ParentVisitor>(
-    mut comp: JsxCustomComponentMetadata<ClientJsxElementVisitor>,
-    parent_visitor: &mut T,
-) -> CallExpr {
-    let props = comp
-        .props
-        .into_iter()
-        .map(|(key, val)| {
-            let key = PropName::Ident(IdentName {
-                span: DUMMY_SP,
-                sym: key.into(),
-            });
-            // Might be other edge cases but callexpr is
-            // the only one I'm seeing
-            let prop = if val.is_call() {
-                Prop::Getter(GetterProp {
-                    span: DUMMY_SP,
-                    key,
-                    type_ann: None,
-                    body: Some(BlockStmt {
-                        span: DUMMY_SP,
-                        ctxt: SyntaxContext::empty(),
-                        stmts: vec![Stmt::Return(ReturnStmt {
-                            span: DUMMY_SP,
-                            arg: Some(Box::new(val)),
-                        })],
-                    }),
-                })
-            } else {
-                Prop::KeyValue(KeyValueProp {
-                    key,
-                    value: Box::new(val),
-                })
-            };
-            PropOrSpread::Prop(Box::new(prop))
-        })
-        .collect();
-    let mut obj = ObjectLit {
-        span: DUMMY_SP,
-        props,
-    };
-    // Add children
-    if !comp.children.is_empty() {
-        let blockstmt = if comp.children.len() == 1 {
-            match build_js_from_client_jsx(comp.children.remove(0), parent_visitor) {
-                BuildResults::Block(bs) => Some(bs),
-                BuildResults::Id(id) => Some(BlockStmt {
-                    span: DUMMY_SP,
-                    ctxt: SyntaxContext::empty(),
-                    stmts: vec![Stmt::Return(ReturnStmt {
-                        span: DUMMY_SP,
-                        arg: Some(Box::new(Expr::Call(id_to_call_expr(id)))),
-                    })],
-                }),
-                BuildResults::Arr(arr) => Some(BlockStmt {
-                    span: DUMMY_SP,
-                    ctxt: SyntaxContext::empty(),
-                    stmts: vec![Stmt::Return(ReturnStmt {
-                        span: DUMMY_SP,
-                        arg: Some(Box::new(Expr::Array(arr))),
-                    })],
-                }),
-                BuildResults::Completed(comp) => {
-                    if !comp.is_call() {
-                        let childrenval = Prop::KeyValue(KeyValueProp {
-                            key: PropName::Ident("children".into()),
-                            value: comp,
-                        });
-                        obj.props.push(PropOrSpread::Prop(Box::new(childrenval)));
-                        // EVALUTAION STOPS HERE IN THIS CASE
-                        None
-                    } else {
-                        // Only call expressions treated like this
-                        Some(BlockStmt {
-                            span: DUMMY_SP,
-                            ctxt: SyntaxContext::empty(),
-                            stmts: vec![Stmt::Return(ReturnStmt {
-                                span: DUMMY_SP,
-                                arg: Some(comp),
-                            })],
-                        })
-                    }
+fn memo_call_expr_mut(res: &mut BuildResults) {
+    if let BuildResults::Completed(expr) = res {
+        if let Expr::Call(call_expr) = &mut **expr {
+            if let Callee::Expr(inner_expr) = &mut call_expr.callee {
+                if call_expr.args.is_empty() {
+                    let mut dummy = Box::new(Expr::dummy());
+                    std::mem::swap(inner_expr, &mut dummy);
+                    *expr = Box::new(wrap_with_memo(dummy).into());
                 }
+            } else {
+                let mut dummy = CallExpr::dummy();
+                std::mem::swap(call_expr, &mut dummy);
+                let new_expr = Box::new(dummy.into());
+                *expr = Box::new(
+                    wrap_with_memo(Box::new(
+                        wrap_in_empty_arrow(BlockStmtOrExpr::Expr(new_expr)).into(),
+                    ))
+                    .into(),
+                );
             }
-        } else {
-            let arr = ArrayLit {
-                span: DUMMY_SP,
-                elems: comp
-                    .children
-                    .into_iter()
-                    .map(|c| {
-                        Some(ExprOrSpread {
-                            spread: None,
-                            expr: standard_build_res_wrappings(build_js_from_client_jsx(
-                                c,
-                                parent_visitor,
-                            )),
-                        })
-                    })
-                    .collect(),
-            };
-            Some(BlockStmt {
-                span: DUMMY_SP,
-                ctxt: SyntaxContext::empty(),
-                stmts: vec![Stmt::Return(ReturnStmt {
-                    span: DUMMY_SP,
-                    arg: Some(Box::new(Expr::Array(arr))),
-                })],
-            })
-        };
-        if blockstmt.is_some() {
-            let childrengetter = Prop::Getter(GetterProp {
-                span: DUMMY_SP,
-                key: PropName::Ident("children".into()),
-                type_ann: None,
-                body: blockstmt,
-            });
-            obj.props.push(PropOrSpread::Prop(Box::new(childrengetter)));
-        } // Other case handled already within match exp
-    };
-    CallExpr {
-        span: DUMMY_SP,
-        ctxt: SyntaxContext::empty(),
-        callee: Callee::Expr(name_as_expr(generate_create_component_name())),
-        args: vec![ExprOrSpread {
-            spread: None,
-            expr: name_as_expr(comp.value.into()),
-        }],
-        type_args: None,
+        }
     }
 }
 
@@ -195,7 +89,9 @@ fn handle_fragment_chunks<T: ParentVisitor>(
     parent_visitor: &mut T,
 ) -> BuildResults {
     if frag.children.len() == 1 {
-        return build_js_from_client_jsx(frag.children.remove(0), parent_visitor);
+        let mut build_res = build_js_from_client_jsx(frag.children.remove(0), parent_visitor);
+        memo_call_expr_mut(&mut build_res);
+        return build_res;
     }
     let arr = ArrayLit {
         span: DUMMY_SP,
@@ -203,12 +99,11 @@ fn handle_fragment_chunks<T: ParentVisitor>(
             .children
             .into_iter()
             .map(|child| {
+                let mut build_res = build_js_from_client_jsx(child, parent_visitor);
+                memo_call_expr_mut(&mut build_res);
                 Some(ExprOrSpread {
                     spread: None,
-                    expr: standard_build_res_wrappings(build_js_from_client_jsx(
-                        child,
-                        parent_visitor,
-                    )),
+                    expr: standard_build_res_wrappings(build_res),
                 })
             })
             .collect(),
@@ -228,13 +123,14 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
                 return handle_fragment_chunks(f, parent_visitor);
             }
             Some(PossiblePlaceholders::Component(c)) => {
-                return BuildResults::Completed(Box::new(Expr::Call(create_component_expr(
-                    c,
-                    parent_visitor,
-                ))));
+                let mut client_component_builder =
+                    ClientCustomComponentBuilder::new(parent_visitor, c);
+                return BuildResults::Completed(
+                    client_component_builder.build_and_wrap_custom_component(),
+                );
             }
             Some(PossiblePlaceholders::Expression(e)) => {
-                return BuildResults::Completed(Box::new(e));
+                return BuildResults::Completed(e);
             }
             None => { /* Do Nothing here */ }
         }
@@ -255,10 +151,7 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
         let count = *(parent_visitor.element_count());
         match part {
             JsxTemplateKind::Opening(open) => {
-                needs_long_form = needs_long_form
-                    || !open.attrs.is_empty()
-                    || !open.events.is_empty()
-                    || !open.styles.is_empty();
+                needs_long_form = needs_long_form || !open.attrs.is_empty();
                 add_closes(&mut templ_string, &mut closing_el_builder);
                 add_opening(
                     &mut templ_string,
@@ -301,11 +194,12 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
                 if let Some(placeholder_data) = parsed_data.placeholders.get_mut(p) {
                     let placeholder_expr = match placeholder_data.take() {
                         Some(PossiblePlaceholders::Component(c)) => {
-                            let transformed = create_component_expr(c, parent_visitor);
+                            let mut client_builder =
+                                ClientCustomComponentBuilder::new(parent_visitor, c);
                             // TODO YOU NEED TO BUILD THE INSERT CALLEXPR AND WRAP THIS IN IT!
-                            Some(Box::new(Expr::Call(transformed)))
+                            Some(client_builder.build_and_wrap_custom_component())
                         }
-                        Some(PossiblePlaceholders::Expression(e)) => Some(Box::new(e)),
+                        Some(PossiblePlaceholders::Expression(e)) => Some(e),
                         Some(PossiblePlaceholders::Fragment(f)) => Some(
                             standard_build_res_wrappings(handle_fragment_chunks(f, parent_visitor)),
                         ),

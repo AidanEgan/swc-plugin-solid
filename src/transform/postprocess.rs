@@ -1,8 +1,8 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use swc_core::{
     atoms::Atom,
-    common::{source_map::PURE_SP, SyntaxContext, DUMMY_SP},
+    common::{SyntaxContext, DUMMY_SP},
     ecma::ast::{
         BindingIdent, CallExpr, Callee, Expr, ExprOrSpread, Ident, ImportDecl,
         ImportNamedSpecifier, ImportPhase, ImportSpecifier, Lit, ModuleDecl, ModuleExportName,
@@ -10,50 +10,53 @@ use swc_core::{
     },
 };
 
-use crate::helpers::generate_var_names::{
-    generate_import_name, generate_template_expr_name, generate_template_name,
+use crate::helpers::{
+    common_into_expressions::ident_name,
+    generate_var_names::{
+        generate_import_name, generate_template_expr_name, generate_template_name,
+    },
 };
 
-fn ident_name(name: Atom, is_pure: bool) -> Ident {
-    Ident {
-        span: if is_pure { PURE_SP } else { DUMMY_SP },
-        ctxt: SyntaxContext::empty(),
-        sym: name,
-        optional: false,
+fn empty_var_decl() -> VarDeclarator {
+    VarDeclarator {
+        span: DUMMY_SP,
+        name: Pat::Ident(BindingIdent {
+            id: Ident {
+                span: DUMMY_SP,
+                ctxt: SyntaxContext::empty(),
+                sym: Atom::default(),
+                optional: false,
+            },
+            type_ann: None,
+        }),
+        init: None,
+        definite: false,
     }
 }
 
-pub fn create_template_declarations(templates: &mut BTreeMap<String, usize>) -> VarDecl {
-    let mut swapped: BTreeMap<String, usize> = BTreeMap::new();
-    std::mem::swap(templates, &mut swapped);
-    let decls = swapped
-        .into_iter()
-        .map(|(k, v)| {
-            let tempvar = VarDeclarator {
-                span: DUMMY_SP,
-                name: Pat::Ident(BindingIdent {
-                    id: ident_name(generate_template_name(v), false),
-                    type_ann: None,
-                }),
-                init: Some(Box::new(Expr::Call(CallExpr {
-                    span: DUMMY_SP,
-                    ctxt: SyntaxContext::empty(),
-                    callee: Callee::Expr(Box::new(Expr::Ident(ident_name(
-                        generate_template_expr_name(),
-                        true,
-                    )))),
-                    args: vec![ExprOrSpread {
-                        spread: None,
-                        expr: Box::new(Expr::Lit(Lit::Str(k.into()))),
-                    }],
-                    type_args: None,
-                }))),
-                definite: false,
-            };
-            tempvar
-        })
-        .collect();
-
+pub fn create_template_declarations(
+    templates: &mut HashMap<String, usize>,
+    num_templates: usize,
+) -> VarDecl {
+    let mut decls: Vec<VarDeclarator> = vec![empty_var_decl(); num_templates];
+    // 2 assumptions that should always be true:
+    // 1 <= i <= num_templates && i is unique
+    for (template, i) in templates.drain() {
+        decls[i - 1].name.as_mut_ident().unwrap().id.sym = generate_template_name(i);
+        decls[i - 1].init = Some(Box::new(Expr::Call(CallExpr {
+            span: DUMMY_SP,
+            ctxt: SyntaxContext::empty(),
+            callee: Callee::Expr(Box::new(Expr::Ident(ident_name(
+                generate_template_expr_name(),
+                true,
+            )))),
+            args: vec![ExprOrSpread {
+                spread: None,
+                expr: Box::new(Expr::Lit(Lit::Str(template.into()))),
+            }],
+            type_args: None,
+        })));
+    }
     VarDecl {
         span: DUMMY_SP,
         ctxt: SyntaxContext::empty(),

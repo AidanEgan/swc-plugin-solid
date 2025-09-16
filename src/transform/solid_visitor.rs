@@ -5,7 +5,7 @@ use crate::transform::parent_visitor::ParentVisitor;
 use crate::transform::postprocess::{add_imports, create_template_declarations};
 use crate::{config::PluginArgs, helpers::should_skip::should_skip};
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use swc_core::common::Spanned;
 use swc_core::ecma::ast::{Decl, ModuleItem, Program, Stmt};
 use swc_core::ecma::visit::VisitMutWith;
@@ -22,7 +22,7 @@ pub struct SolidJsVisitor<C: Clone + Comments, S: SourceMapper> {
     options: PluginArgs,
     // HashMap would be more efficient, but for testing purposes
     // I want templates to have a predictable order
-    templates: BTreeMap<String, usize>,
+    templates: HashMap<String, usize>,
     events: HashSet<String>,
     imports: HashSet<String>,
     element_count: usize,
@@ -79,7 +79,7 @@ impl<C: Clone + Comments, S: SourceMapper> SolidJsVisitor<C, S> {
             options: plugin_options,
             template_count: 0,
             element_count: 0,
-            templates: BTreeMap::new(),
+            templates: HashMap::new(),
             events: HashSet::new(),
             imports: HashSet::new(),
         }
@@ -111,7 +111,7 @@ impl<C: Clone + Comments, S: SourceMapper> VisitMut for SolidJsVisitor<C, S> {
             self.options.module_name.clone(),
         );
         if has_templates {
-            let decl = create_template_declarations(&mut self.templates);
+            let decl = create_template_declarations(&mut self.templates, self.template_count);
             imports_vec.push(ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(decl)))));
         }
         // Have to insert these statements at the start - O(n) operation ugh

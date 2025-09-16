@@ -1,6 +1,8 @@
 pub mod block_expr_builder;
 pub mod builder_helpers;
+pub mod custom_client_component_builder;
+pub mod element_properties_builder;
 pub mod insert_queue;
 pub mod jsx_expr_builder_client;
-pub mod jsx_expr_parser_client;
+pub mod jsx_expr_transformer_client;
 pub mod jsx_parser_client;

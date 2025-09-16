@@ -1,6 +1,6 @@
 use swc_core::ecma::{
     ast::{Expr, JSXElement, JSXFragment},
-    visit::{Visit, VisitWith},
+    visit::{Visit, VisitMut, VisitMutWith, VisitWith},
 };
 
 use crate::builder::client::{
@@ -20,38 +20,34 @@ pub enum ParsedJsxData {
 
 pub trait JsxBuilder {
     fn visit_and_build_from_jsx<T: ParentVisitor>(
-        &self,
+        &mut self,
         parent_visitor: &mut T,
     ) -> (Box<Expr>, bool);
 }
 
 impl JsxBuilder for JSXElement {
     fn visit_and_build_from_jsx<T: ParentVisitor>(
-        &self,
+        &mut self,
         parent_visitor: &mut T,
     ) -> (Box<Expr>, bool) {
-        let parsed = parse_jsx(parent_visitor, |v| {
-            self.visit_with(v);
-        });
+        let parsed = parse_jsx(parent_visitor, self);
         build_from_jsx(parsed, parent_visitor)
     }
 }
 
 impl JsxBuilder for JSXFragment {
     fn visit_and_build_from_jsx<T: ParentVisitor>(
-        &self,
+        &mut self,
         parent_visitor: &mut T,
     ) -> (Box<Expr>, bool) {
-        let parsed = parse_jsx(parent_visitor, |v| {
-            self.visit_with(v);
-        });
+        let parsed = parse_jsx(parent_visitor, self);
         build_from_jsx(parsed, parent_visitor)
     }
 }
 
-fn parse_jsx<T: ParentVisitor, F: Fn(&mut dyn Visit)>(
+fn parse_jsx<T: ParentVisitor, K: VisitMutWith<ClientJsxElementVisitor>>(
     parent_visitor: &T,
-    on_visit: F,
+    el: &mut K,
 ) -> ParsedJsxData {
     match parent_visitor.get_generate() {
         "ssr" => {
@@ -63,7 +59,7 @@ fn parse_jsx<T: ParentVisitor, F: Fn(&mut dyn Visit)>(
         // Client
         _ => {
             let mut visitor = ClientJsxElementVisitor::new();
-            on_visit(&mut visitor);
+            el.visit_mut_with(&mut visitor);
             ParsedJsxData::Client(visitor)
         }
     }

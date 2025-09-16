@@ -1,10 +1,11 @@
 use super::super::parser_types::{JsxOpeningMetadata, JsxTemplateKind, PossiblePlaceholders};
-use super::jsx_expr_parser_client::ClientJsxExprParser;
-use super::jsx_expr_parser_client::TransformedExprRes;
-use crate::builder::parser_types::JsxFragmentMetadata;
-use crate::helpers::component_helpers::is_solid_component;
-use swc_core::ecma::ast::{JSXElement, JSXFragment};
-use swc_core::ecma::visit::{Visit, VisitWith};
+use crate::builder::client::builder_helpers::own_box_expr;
+use crate::builder::parser_types::{JsxCustomComponentMetadata, JsxFragmentMetadata};
+use crate::helpers::component_helpers::{get_component_name, is_solid_component};
+use crate::helpers::opening_element_helpers::parse_attrs;
+use swc_core::common::util::take::Take;
+use swc_core::ecma::ast::{Expr, JSXElement, JSXExpr, JSXFragment, Lit};
+use swc_core::ecma::visit::{VisitMut, VisitMutWith};
 
 // Logic for elements and fragments will be similar - use this for both
 
@@ -18,39 +19,32 @@ pub struct ClientJsxElementVisitor {
 }
 
 impl ClientJsxElementVisitor {
-    fn add_data_from_expr(&mut self, data: TransformedExprRes) {
-        match data {
-            TransformedExprRes::NewExpr(transformed_expr) => {
-                self.template
-                    .push(JsxTemplateKind::Placeholder(self.placeholder_count));
-                self.placeholders
-                    .push(Some(PossiblePlaceholders::Expression(transformed_expr)));
-                self.placeholder_count += 1;
-            }
-            TransformedExprRes::NewTmpl(transformed_tmpl) => {
-                self.template.push(transformed_tmpl);
-            }
-        }
+    fn add_expr_placeholder(&mut self, data: Box<Expr>) {
+        self.template
+            .push(JsxTemplateKind::Placeholder(self.placeholder_count));
+        self.placeholders
+            .push(Some(PossiblePlaceholders::Expression(data)));
+        self.placeholder_count += 1;
     }
 }
 
-impl Visit for ClientJsxElementVisitor {
-    fn visit_jsx_closing_element(&mut self, node: &swc_core::ecma::ast::JSXClosingElement) {
+impl VisitMut for ClientJsxElementVisitor {
+    fn visit_mut_jsx_closing_element(&mut self, node: &mut swc_core::ecma::ast::JSXClosingElement) {
         // Does it matter here??? I
-        let (_is_custom_component, name) = is_solid_component(&node.name);
+        let name = get_component_name(&node.name);
         self.template.push(JsxTemplateKind::Closing(name));
     }
-    fn visit_jsx_fragment(&mut self, node: &JSXFragment) {
+    fn visit_mut_jsx_fragment(&mut self, node: &mut JSXFragment) {
         let mut needs_revisit = false;
         /*
          * Each child is visited separately w/ its own visitor
          */
         let children = node
             .children
-            .iter()
-            .map(|child| {
+            .drain(..)
+            .map(|mut child| {
                 let mut new_visitor = ClientJsxElementVisitor::new();
-                child.visit_with(&mut new_visitor);
+                child.visit_mut_with(&mut new_visitor);
                 needs_revisit = needs_revisit || new_visitor.needs_revisit;
                 new_visitor
             })
@@ -64,41 +58,91 @@ impl Visit for ClientJsxElementVisitor {
             })));
         self.placeholder_count += 1;
     }
-    fn visit_jsx_opening_element(&mut self, node: &swc_core::ecma::ast::JSXOpeningElement) {
-        let (is_custom_component, name) = is_solid_component(&node.name);
+
+    fn visit_mut_jsx_element(&mut self, node: &mut JSXElement) {
+        let (is_custom_component, name) = is_solid_component(&node.opening.name);
         if is_custom_component {
-            todo!("Create component placeholder -- check for builtins")
-        } else {
-            // Done here to avoid extra clone if not needed
-            let close = if node.self_closing {
-                Some(JsxTemplateKind::Closing(name.clone()))
-            } else {
-                None
+            let custom_component = JsxCustomComponentMetadata::<ClientJsxElementVisitor> {
+                value: name,
+                props: parse_attrs(&mut node.opening),
+                children: node
+                    .children
+                    .drain(..)
+                    .map(|mut child| {
+                        let mut new_visitor = ClientJsxElementVisitor::new();
+                        child.visit_mut_with(&mut new_visitor);
+                        self.needs_revisit = self.needs_revisit || new_visitor.needs_revisit;
+                        new_visitor
+                    })
+                    .collect(),
+                needs_revisit: true,
+                is_builtin: false,
             };
-            let mut opening = JsxOpeningMetadata::new(name);
-            /*
-            todo!("add events from tag");
-            todo!("add styles from tag");
-            todo!("add attributes from tag");
-            */
-            self.template.push(JsxTemplateKind::Opening(opening));
-            if let Some(close) = close {
-                self.template.push(close);
-            }
+            // Index is off by one
+            self.template
+                .push(JsxTemplateKind::Placeholder(self.placeholder_count));
+            self.placeholders
+                .push(Some(PossiblePlaceholders::Component(custom_component)));
+            self.placeholder_count += 1;
+        } else {
+            node.opening.visit_mut_with(self);
+            node.children.visit_mut_with(self);
+        }
+    }
+
+    fn visit_mut_jsx_opening_element(&mut self, node: &mut swc_core::ecma::ast::JSXOpeningElement) {
+        //Custom components do not visit here!!!!
+        // Done here to avoid extra clone if not needed
+        let name = get_component_name(&node.name);
+        let close = if node.self_closing {
+            Some(JsxTemplateKind::Closing(name.clone()))
+        } else {
+            None
+        };
+        let mut opening = JsxOpeningMetadata {
+            value: name,
+            attrs: parse_attrs(node),
+        };
+        /*
+        todo!("add events from tag");
+        todo!("add styles from tag");
+        todo!("add attributes from tag");
+        */
+        self.template.push(JsxTemplateKind::Opening(opening));
+        if let Some(close) = close {
+            self.template.push(close);
         }
     }
 
     /* Possible JSX Element childs (along with JSX Element/JSX Fragment) */
 
-    fn visit_jsx_expr_container(&mut self, node: &swc_core::ecma::ast::JSXExprContainer) {
-        let mut expr_visitor: ClientJsxExprParser = ClientJsxExprParser::new();
-        node.expr.visit_with(&mut expr_visitor);
-        if let Some(res) = expr_visitor.result {
-            self.add_data_from_expr(res);
+    fn visit_mut_jsx_expr_container(&mut self, node: &mut swc_core::ecma::ast::JSXExprContainer) {
+        // These are basically just jsx text, we can treat them as such
+        match &mut node.expr {
+            JSXExpr::Expr(expr) => {
+                if let Some(lit) = expr.as_mut_lit() {
+                    match lit {
+                        Lit::Str(string_lit) => {
+                            self.template
+                                .push(JsxTemplateKind::Text(string_lit.value.to_string()));
+                            return;
+                        }
+                        Lit::Num(num_lit) => {
+                            self.template
+                                .push(JsxTemplateKind::Text(num_lit.value.to_string()));
+                            return;
+                        }
+                        _ => { /* Pass */ }
+                    }
+                }
+
+                self.add_expr_placeholder(own_box_expr(expr));
+            }
+            JSXExpr::JSXEmptyExpr(_) => { /* Explicitly do nothing */ }
         }
     }
 
-    fn visit_jsx_text(&mut self, node: &swc_core::ecma::ast::JSXText) {
+    fn visit_mut_jsx_text(&mut self, node: &mut swc_core::ecma::ast::JSXText) {
         // Just get rid of newlines because they will be a problem for the template
         // POSSIBLE OPTIMIZATION: Could just 'trim' the string and omit empty JSX Text values?
         let transformed = node.value.replace(['\n', '\r'], "");
@@ -112,18 +156,15 @@ impl Visit for ClientJsxElementVisitor {
     */
 
     // Need to "unspread" it
-    fn visit_jsx_spread_child(&mut self, node: &swc_core::ecma::ast::JSXSpreadChild) {
-        let mut expr_visitor: ClientJsxExprParser = ClientJsxExprParser::new();
-        node.expr.visit_with(&mut expr_visitor);
-        if let Some(res) = expr_visitor.result {
-            self.add_data_from_expr(res);
-        }
+    fn visit_mut_jsx_spread_child(&mut self, node: &mut swc_core::ecma::ast::JSXSpreadChild) {
+        self.add_expr_placeholder(own_box_expr(&mut node.expr));
     }
     /* Not sure if there is anything special to do here
     fn visit_jsx_member_expr(&mut self, node: &swc_core::ecma::ast::JSXMemberExpr) {
 
     }
     */
+    fn visit_mut_jsx_attr(&mut self, node: &mut swc_core::ecma::ast::JSXAttr) {}
 }
 
 impl ClientJsxElementVisitor {
