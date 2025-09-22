@@ -2,12 +2,15 @@ use super::CreateNewExprError;
 use crate::builder::jsx_builder::ParsedJsxData;
 use crate::transform::create_new_expr_mut;
 use crate::transform::parent_visitor::ParentVisitor;
-use crate::transform::postprocess::{add_imports, create_template_declarations};
+use crate::transform::postprocess::{add_events, add_imports, create_template_declarations};
+use crate::transform::scope_manager::{ScopeManager, TrackedVariable};
 use crate::{config::PluginArgs, helpers::should_skip::should_skip};
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use swc_core::common::Spanned;
-use swc_core::ecma::ast::{Decl, ModuleItem, Program, Stmt};
+use swc_core::ecma::ast::{
+    BlockStmt, Decl, FnDecl, Function, ModuleItem, Pat, Program, Stmt, VarDecl,
+};
 use swc_core::ecma::visit::VisitMutWith;
 use swc_core::{
     common::{comments::Comments, SourceMapper},
@@ -20,13 +23,14 @@ pub struct SolidJsVisitor<C: Clone + Comments, S: SourceMapper> {
     source_map: std::sync::Arc<S>,
     comments: C,
     options: PluginArgs,
-    // HashMap would be more efficient, but for testing purposes
-    // I want templates to have a predictable order
+    scope_manager: ScopeManager,
     templates: HashMap<String, usize>,
-    events: HashSet<String>,
+    events: BTreeSet<String>,
     // Want to guarantee order (mostly for tests)
     imports: BTreeSet<String>,
     element_count: usize,
+    ref_count: usize,
+    v_count: usize,
     template_count: usize,
 }
 
@@ -70,10 +74,19 @@ impl<C: Clone + Comments, S: SourceMapper> ParentVisitor for SolidJsVisitor<C, S
     fn element_count(&mut self) -> &mut usize {
         &mut self.element_count
     }
+    fn ref_count(&mut self) -> &mut usize {
+        &mut self.ref_count
+    }
+    fn v_count(&mut self) -> &mut usize {
+        &mut self.v_count
+    }
     fn add_import(&mut self, import_name: Cow<str>) {
         if !self.imports.contains(import_name.as_ref()) {
             self.imports.insert(import_name.into_owned());
         }
+    }
+    fn get_var_if_in_scope(&self, var: &swc_core::atoms::Atom) -> Option<&TrackedVariable> {
+        self.scope_manager.try_get_var(var)
     }
 }
 
@@ -85,8 +98,11 @@ impl<C: Clone + Comments, S: SourceMapper> SolidJsVisitor<C, S> {
             options: plugin_options,
             template_count: 0,
             element_count: 0,
+            ref_count: 0,
+            v_count: 0,
+            scope_manager: ScopeManager::new(),
             templates: HashMap::new(),
-            events: HashSet::new(),
+            events: BTreeSet::new(),
             imports: BTreeSet::new(),
         }
     }
@@ -120,15 +136,17 @@ impl<C: Clone + Comments, S: SourceMapper> VisitMut for SolidJsVisitor<C, S> {
             let decl = create_template_declarations(&mut self.templates, self.template_count);
             imports_vec.push(ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(decl)))));
         }
+
         // Have to insert these statements at the start - O(n) operation ugh
         match node {
             Program::Module(module) => {
-                imports_vec.extend(module.body.drain(..));
+                imports_vec.extend(module.body.drain(..).chain(add_events(&mut self.events)));
                 module.body = imports_vec;
             }
             Program::Script(script) => {
                 script.body = imports_vec
                     .into_iter()
+                    .chain(add_events(&mut self.events))
                     // Lazy, not great way to just pull out templates
                     .filter_map(|x| {
                         if let ModuleItem::Stmt(s) = x {
@@ -143,6 +161,37 @@ impl<C: Clone + Comments, S: SourceMapper> VisitMut for SolidJsVisitor<C, S> {
         }
     }
 
+    // Scope manager - a few places need to have context about vars
+
+    fn visit_mut_var_decl(&mut self, n: &mut VarDecl) {
+        for declarator in &n.decls {
+            self.scope_manager.add_var(declarator);
+        }
+        n.visit_mut_children_with(self);
+    }
+
+    // Function Declarations
+    fn visit_mut_fn_decl(&mut self, n: &mut FnDecl) {
+        self.scope_manager
+            .declare_variable(n.ident.sym.clone(), TrackedVariable::FunctionIdent);
+        n.visit_mut_children_with(self);
+    }
+
+    // Function and block scoping
+    fn visit_mut_function(&mut self, n: &mut Function) {
+        self.scope_manager.enter_scope();
+        // Here you would also add parameters to the scope
+        n.visit_mut_children_with(self);
+        self.scope_manager.exit_scope();
+    }
+
+    fn visit_mut_block_stmt(&mut self, n: &mut BlockStmt) {
+        self.scope_manager.enter_scope();
+        n.visit_mut_children_with(self);
+        self.scope_manager.exit_scope();
+    }
+
+    // Core visitor to find + transform JSX Expressions
     fn visit_mut_expr(&mut self, node: &mut swc_core::ecma::ast::Expr) {
         match create_new_expr_mut(node, self) {
             Ok((new_expr, needs_more_traverse)) => {
@@ -161,129 +210,4 @@ impl<C: Clone + Comments, S: SourceMapper> VisitMut for SolidJsVisitor<C, S> {
             }
         }
     }
-    /*
-     * Are these still needed? I won't delete them just yet in case there is anything I'm missing
-     * but it looks like the generic `Expr` visitor will do what I need, which is find JSX Expressions
-     * and then convert them into not JSX Expressions
-
-    fn visit_mut_arrow_expr(&mut self, node: &mut swc_core::ecma::ast::ArrowExpr) {
-        match create_new_expr_option(node.body.as_expr(), self) {
-            Ok((new_expr, needs_more_traverse)) => {
-                node.body = Box::new(BlockStmtOrExpr::Expr(new_expr));
-                if needs_more_traverse {
-                    node.visit_mut_children_with(self);
-                }
-            }
-            Err(CreateNewExprError::NoChangeNeeded) => {
-                // Any potential JSX in a block statement will be encapsulated
-                // by some other statement, likely a return stmt. No need to handle here.
-                node.visit_mut_children_with(self);
-            }
-            Err(CreateNewExprError::ExprNotFound) => { /* Nothing to do here! */ }
-        }
-    }
-
-    // Ternary expr.
-    fn visit_mut_cond_expr(&mut self, node: &mut swc_core::ecma::ast::CondExpr) {
-        let mut visit_children = false;
-        match create_new_expr(&node.cons, self) {
-            Ok((new_expr, needs_more_traverse)) => {
-                node.cons = new_expr;
-                if needs_more_traverse {
-                    node.visit_mut_children_with(self);
-                }
-            }
-            Err(CreateNewExprError::NoChangeNeeded) => {
-                // Any potential JSX in a block statement will be encapsulated
-                // by some other statement, likely a return stmt. No need to handle here.
-                visit_children = true;
-            }
-            Err(CreateNewExprError::ExprNotFound) => { /* Nothing to do here! */ }
-        }
-        match create_new_expr(&node.alt, self) {
-            Ok((new_expr, needs_more_traverse)) => {
-                node.alt = new_expr;
-                if needs_more_traverse {
-                    node.visit_mut_children_with(self);
-                }
-            }
-            Err(CreateNewExprError::NoChangeNeeded) => {
-                // Any potential JSX in a block statement will be encapsulated
-                // by some other statement, likely a return stmt. No need to handle here.
-                visit_children = true;
-            }
-            Err(CreateNewExprError::ExprNotFound) => { /* Nothing to do here! */ }
-        }
-        if visit_children {
-            node.visit_mut_children_with(self);
-        }
-    }
-
-    fn visit_mut_return_stmt(&mut self, node: &mut swc_core::ecma::ast::ReturnStmt) {
-        // Check is 'JSX' return statement -> exit if not
-        match create_new_expr_option(node.arg.as_ref(), self) {
-            Ok((new_expr, needs_more_traverse)) => {
-                node.arg = Some(new_expr);
-                if needs_more_traverse {
-                    node.visit_mut_children_with(self);
-                }
-            }
-            Err(CreateNewExprError::NoChangeNeeded) => {
-                node.visit_mut_children_with(self);
-            }
-            Err(CreateNewExprError::ExprNotFound) => { /* Nothing to do here! */ }
-        }
-    }
-
-    fn visit_mut_var_declarator(&mut self, node: &mut swc_core::ecma::ast::VarDeclarator) {
-        // Check + transform potential JSX
-        match create_new_expr_option(node.init.as_ref(), self) {
-            Ok((new_expr, needs_more_traverse)) => {
-                node.init = Some(new_expr);
-                if needs_more_traverse {
-                    node.visit_mut_children_with(self);
-                }
-            }
-            Err(CreateNewExprError::NoChangeNeeded) => {
-                node.visit_mut_children_with(self);
-            }
-            Err(CreateNewExprError::ExprNotFound) => { /* Nothing to do here! */ }
-        }
-    }
-
-    fn visit_mut_call_expr(&mut self, node: &mut swc_core::ecma::ast::CallExpr) {
-        // Replace any JSX in function args
-        // This is particularly important as this parser recursively transforms jsx
-        //
-        let mut transformed_vec: Vec<(usize, ExprOrSpread)> = Vec::new();
-        let mut any_recurse = false;
-        // Collect all transformed expressions
-        for (i, v) in node.args.iter().enumerate() {
-            let new_expr_res = create_new_expr(&v.expr, self);
-            if let Ok((transformed, needs_recurse)) = new_expr_res {
-                any_recurse = any_recurse || needs_recurse;
-                transformed_vec.push((
-                    i,
-                    ExprOrSpread {
-                        spread: None,
-                        expr: transformed,
-                    },
-                ));
-            } else if let Err(CreateNewExprError::NoChangeNeeded) = new_expr_res {
-                any_recurse = true;
-            }
-        }
-        // Swap out old expressions for replaced ones
-        for (replace_index, replace_expr) in transformed_vec {
-            // Should always works
-            if let Some(expr) = node.args.get_mut(replace_index) {
-                *expr = replace_expr;
-            }
-        }
-        if any_recurse {
-            node.visit_mut_children_with(self);
-        }
-    }
-
-    */
 }

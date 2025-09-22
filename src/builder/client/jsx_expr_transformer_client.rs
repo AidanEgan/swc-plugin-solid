@@ -1,3 +1,5 @@
+// Kind of need to implement a scope manager here to catch case of vars declared within a JSX expression block
+// It's probably a fairly niche use case so I'm not doing it now.
 use swc_core::{
     common::util::take::Take,
     ecma::{
@@ -21,6 +23,7 @@ pub struct ClientJsxExprTransformer<'a, T: ParentVisitor> {
     pub needs_revisit: bool,
     transform_call_exprs: bool,
     memo_bin_and_cond: bool,
+    pub should_wrap_in_effect: bool,
 }
 
 impl<'a, T: ParentVisitor> ClientJsxExprTransformer<'a, T> {
@@ -34,6 +37,7 @@ impl<'a, T: ParentVisitor> ClientJsxExprTransformer<'a, T> {
             needs_revisit: false,
             transform_call_exprs,
             memo_bin_and_cond,
+            should_wrap_in_effect: false,
         }
     }
 
@@ -50,7 +54,9 @@ impl<'a, T: ParentVisitor> ClientJsxExprTransformer<'a, T> {
                 }
             } else {
                 let tmp = std::mem::take(node);
-                *node = Box::new(Expr::Arrow(wrap_in_empty_arrow(BlockStmtOrExpr::Expr(tmp))));
+                *node = Box::new(Expr::Arrow(wrap_in_empty_arrow(
+                    BlockStmtOrExpr::Expr(tmp).into(),
+                )));
             }
         }
     }
@@ -64,6 +70,9 @@ impl<'a, T: ParentVisitor> VisitMut for ClientJsxExprTransformer<'a, T> {
     // Intentionally do nothing
     fn visit_mut_expr(&mut self, node: &mut swc_core::ecma::ast::Expr) {
         node.visit_mut_children_with(self);
+        if !self.should_wrap_in_effect && node.is_call() || node.is_arrow() || node.is_fn_expr() {
+            self.should_wrap_in_effect = true;
+        }
         if node.is_jsx_element() || node.is_jsx_fragment() {
             let mut visitor = ClientJsxElementVisitor::new();
             node.visit_mut_with(&mut visitor);
@@ -76,6 +85,9 @@ impl<'a, T: ParentVisitor> VisitMut for ClientJsxExprTransformer<'a, T> {
 
     // "&&" expressions within JSX need to be memo-ized
     fn visit_mut_bin_expr(&mut self, node: &mut swc_core::ecma::ast::BinExpr) {
+        if self.memo_bin_and_cond {
+            self.should_wrap_in_effect = true;
+        }
         //TODO - needs to check if need to _$memo it -> for el's with no parent
         if self.memo_bin_and_cond
             && node.left.is_call()
@@ -90,6 +102,9 @@ impl<'a, T: ParentVisitor> VisitMut for ClientJsxExprTransformer<'a, T> {
 
     // Ternary exprssions within jsx need to be memo-ized
     fn visit_mut_cond_expr(&mut self, node: &mut swc_core::ecma::ast::CondExpr) {
+        if self.memo_bin_and_cond {
+            self.should_wrap_in_effect = true;
+        }
         //TODO - needs to check if need to _$memo it -> for el's with no parent
         if self.memo_bin_and_cond
             && node.test.is_call()

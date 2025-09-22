@@ -1,16 +1,28 @@
 use swc_core::atoms::Atom;
 
+// Variable values
 const PATTERN: &str = "_$";
 const TMPL: &str = "_tmpl$";
-const TEMPLATE: &str = "_$template";
 const EL: &str = "_el$";
-const CREATE_COMPONENT: &str = "_$createComponent";
-const INSERT: &str = "_$insert";
-const USE: &str = "_$use";
 const REF: &str = "_ref$";
+const V: &str = "_v$";
+const EFFECT_ARG: &str = "_p$";
+
+// Imported values
+const TEMPLATE: &str = "_$template";
+const USE: &str = "_$use";
 const MEMO: &str = "_&memo";
+const CREATE_COMPONENT: &str = "_$createComponent";
 const MERGE_PROPS: &str = "_$mergeProps";
+const ADD_EVENT_LISTENER: &str = "_$addEventListener";
+const INSERT: &str = "_$insert";
+const SET_ATTRIBUTE: &str = "_$setAttribute";
+const EFFECT: &str = "_$effect";
+const CLASS_NAME: &str = "_$className";
+
+// Raw values
 pub const REF_RAW: &str = "ref";
+pub const DELEGATE_EVENTS: &str = "_$delegateEvents";
 
 pub fn generate_template_name(id: usize) -> Atom {
     format!("{0}{1}", TMPL, id).into()
@@ -23,6 +35,9 @@ pub fn generate_insert() -> Atom {
 }
 pub fn generate_el(el: usize) -> Atom {
     format!("{0}{1}", EL, el).into()
+}
+pub fn generate_v(v: usize) -> Atom {
+    format!("{0}{1}", V, v).into()
 }
 pub fn generate_template_expr_name() -> Atom {
     TEMPLATE.into()
@@ -46,4 +61,24 @@ pub fn generate_merge_props() -> Atom {
 
 pub fn generate_ref_raw() -> Atom {
     REF_RAW.into()
+}
+
+pub fn generate_add_event_listener() -> Atom {
+    ADD_EVENT_LISTENER.into()
+}
+
+pub fn generate_set_attribute() -> Atom {
+    SET_ATTRIBUTE.into()
+}
+
+pub fn generate_effect() -> Atom {
+    EFFECT.into()
+}
+
+pub fn generate_class_name() -> Atom {
+    CLASS_NAME.into()
+}
+
+pub fn generate_effect_arg() -> Atom {
+    EFFECT_ARG.into()
 }

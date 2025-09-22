@@ -14,7 +14,9 @@ use swc_core::{
 use crate::{
     builder::{
         client::{
-            element_properties_builder::ElementPropertiesBuilder,
+            element_properties::{
+                ref_statement_builder::create_ref_statements, ElementPropertiesBuilder,
+            },
             jsx_expr_builder_client::{
                 build_js_from_client_jsx, standard_build_res_wrappings, BuildResults,
             },
@@ -83,20 +85,20 @@ fn build_ref_expr(stmts: Vec<Stmt>) -> Prop {
     Prop::Method(new_val)
 }
 
-fn build_props_oject_expr(
-    props: Vec<(Atom, Box<Expr>)>,
-    transformer: &mut ElementPropertiesBuilder,
-) -> Box<Expr> {
+fn build_props_oject_expr(props: Vec<(Atom, Box<Expr>)>) -> Box<Expr> {
+    let mut statements: Vec<Stmt> = vec![];
     let props = props
         .into_iter()
         .map(|(key, mut val)| {
             // Certain exprs need to be transformed
             if key.as_str() == REF_RAW {
                 // No transformation done, ownership of expr moves back here
-                if let Some(returned_val) = transformer.create_ref_statements(None, val) {
+                if let Some(returned_val) =
+                    create_ref_statements(&mut statements, &mut 0, None, val)
+                {
                     val = returned_val;
                 } else {
-                    return build_ref_expr(std::mem::take(&mut transformer.statements)).into();
+                    return build_ref_expr(std::mem::take(&mut statements)).into();
                 }
             }
             let key = PropName::Ident(IdentName {
@@ -185,6 +187,10 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
                 .push(ParsedPropsOrSpread::Props(parsed_prop_slice))
         }
 
+        if self.metadata.children.is_empty() {
+            return;
+        }
+
         let mut children: Vec<Box<Expr>> = self
             .metadata
             .children
@@ -200,9 +206,7 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
                 standard_build_res_wrappings(build)
             })
             .collect();
-        if children.is_empty() {
-            return;
-        }
+
         let wrapped = if children.len() == 1 {
             children.pop().unwrap()
         } else {
@@ -230,7 +234,6 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
         // Use mergeprops if necessary
         // build props object
         // make transformations -> specifically for ref
-        let mut prop_builder = ElementPropertiesBuilder::new(0); // TODO ADD PARENT VIS CNT
         let res = if self.needs_merge_props {
             let merge_props = generate_merge_props();
             self.parent_visitor.add_import(merge_props.as_str().into());
@@ -243,9 +246,7 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
                     .parsed_props
                     .drain(..)
                     .map(|parse| match parse {
-                        ParsedPropsOrSpread::Props(items) => {
-                            build_props_oject_expr(items, &mut prop_builder).into()
-                        }
+                        ParsedPropsOrSpread::Props(items) => build_props_oject_expr(items).into(),
                         ParsedPropsOrSpread::Spread(expr) => expr.into(),
                     })
                     .collect(),
@@ -254,9 +255,7 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
         } else {
             // Should have length of 1
             match self.parsed_props.pop() {
-                Some(ParsedPropsOrSpread::Props(items)) => {
-                    build_props_oject_expr(items, &mut prop_builder).into()
-                }
+                Some(ParsedPropsOrSpread::Props(items)) => build_props_oject_expr(items).into(),
                 Some(ParsedPropsOrSpread::Spread(expr)) => expr.into(),
                 None => Box::new(Expr::Object(ObjectLit::default())),
             }

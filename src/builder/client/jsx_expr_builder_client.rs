@@ -9,6 +9,8 @@ use crate::{
                 block_to_call_expr, id_to_call_expr, wrap_in_empty_arrow, wrap_with_memo,
             },
             custom_client_component_builder::ClientCustomComponentBuilder,
+            effect_builder::EffectBuilder,
+            element_properties::ElementPropertiesBuilder,
             insert_queue::{InsertBuilder, InsertQueue, PossibleInsert},
         },
         parser_types::{JsxFragmentMetadata, PossiblePlaceholders},
@@ -17,6 +19,7 @@ use crate::{
     transform::parent_visitor::ParentVisitor,
 };
 
+use std::collections::HashMap;
 use swc_core::{
     common::{util::take::Take, SyntaxContext, DUMMY_SP},
     ecma::ast::{
@@ -52,11 +55,15 @@ fn add_opening(
     templ_string: &mut String,
     parent_element_stack: &mut Vec<usize>,
     opening_el: &str,
+    props: &mut HashMap<String, String>,
     count: usize,
 ) {
     parent_element_stack.push(count);
     *templ_string += "<";
     *templ_string += opening_el;
+    props.drain().for_each(|(k, v)| {
+        *templ_string += format!(" {0}={1}", k, v).as_str();
+    });
     *templ_string += ">";
 }
 
@@ -75,7 +82,7 @@ fn memo_call_expr_mut(res: &mut BuildResults) {
                 let new_expr = Box::new(dummy.into());
                 *expr = Box::new(
                     wrap_with_memo(Box::new(
-                        wrap_in_empty_arrow(BlockStmtOrExpr::Expr(new_expr)).into(),
+                        wrap_in_empty_arrow(BlockStmtOrExpr::Expr(new_expr).into()).into(),
                     ))
                     .into(),
                 );
@@ -145,6 +152,7 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
     let mut needs_long_form = false;
     let mut insert_queue = InsertQueue::new();
     let mut block_builder = BlockExprBuilder::new();
+    let mut effect_builder = EffectBuilder::new();
 
     // Build template string -> attach to parent visitor
     for part in parsed_data.template {
@@ -153,10 +161,18 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
             JsxTemplateKind::Opening(open) => {
                 needs_long_form = needs_long_form || !open.attrs.is_empty();
                 add_closes(&mut templ_string, &mut closing_el_builder);
+                let mut property_builder =
+                    ElementPropertiesBuilder::new(parent_visitor, &mut effect_builder);
+
+                let el_name = property_builder.build_el_property_statements(open, count);
+                for to_insert in property_builder.statements.drain(..) {
+                    block_builder.add_stmt(to_insert);
+                }
                 add_opening(
                     &mut templ_string,
                     &mut parent_element_stack,
-                    &open.value,
+                    &el_name,
+                    &mut property_builder.direct_template_inserts,
                     count,
                 );
                 block_builder.add_decl(count);
@@ -243,6 +259,11 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
     // Save for return stmt
     block_builder.add_decls_to_final(temp_id);
 
+    // Check for effects
+    let mut property_builder = ElementPropertiesBuilder::new(parent_visitor, &mut effect_builder);
+    if let Some(stmt) = property_builder.build_effect_statement() {
+        block_builder.add_stmt(stmt);
+    };
     BuildResults::Block(BlockStmt {
         span: DUMMY_SP,
         ctxt: SyntaxContext::empty(),

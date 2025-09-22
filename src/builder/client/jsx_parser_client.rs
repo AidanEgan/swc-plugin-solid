@@ -3,7 +3,6 @@ use crate::builder::client::builder_helpers::own_box_expr;
 use crate::builder::parser_types::{JsxCustomComponentMetadata, JsxFragmentMetadata};
 use crate::helpers::component_helpers::{get_component_name, is_solid_component};
 use crate::helpers::opening_element_helpers::parse_attrs;
-use swc_core::common::util::take::Take;
 use swc_core::ecma::ast::{Expr, JSXElement, JSXExpr, JSXFragment, Lit};
 use swc_core::ecma::visit::{VisitMut, VisitMutWith};
 
@@ -64,7 +63,7 @@ impl VisitMut for ClientJsxElementVisitor {
         if is_custom_component {
             let custom_component = JsxCustomComponentMetadata::<ClientJsxElementVisitor> {
                 value: name,
-                props: parse_attrs(&mut node.opening),
+                props: parse_attrs(&mut node.opening).0,
                 children: node
                     .children
                     .drain(..)
@@ -99,15 +98,12 @@ impl VisitMut for ClientJsxElementVisitor {
         } else {
             None
         };
-        let mut opening = JsxOpeningMetadata {
+        let (attrs, has_spread) = parse_attrs(node);
+        let opening = JsxOpeningMetadata {
             value: name,
-            attrs: parse_attrs(node),
+            attrs,
+            has_spread,
         };
-        /*
-        todo!("add events from tag");
-        todo!("add styles from tag");
-        todo!("add attributes from tag");
-        */
         self.template.push(JsxTemplateKind::Opening(opening));
         if let Some(close) = close {
             self.template.push(close);

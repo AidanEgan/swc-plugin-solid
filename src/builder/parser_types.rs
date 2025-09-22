@@ -1,6 +1,6 @@
 use swc_core::{
     atoms::Atom,
-    ecma::ast::{Expr, JSXAttrOrSpread},
+    ecma::ast::{Expr, JSXAttr, JSXAttrOrSpread, JSXAttrValue},
 };
 
 /*
@@ -13,6 +13,7 @@ pub struct JsxOpeningMetadata {
     // Spread elements have no 'key'
     pub attrs: Vec<(Option<Atom>, JSXAttrOrSpread)>,
     pub value: String,
+    pub has_spread: bool,
 }
 
 impl JsxOpeningMetadata {
@@ -20,6 +21,7 @@ impl JsxOpeningMetadata {
         Self {
             attrs: Vec::new(),
             value,
+            has_spread: false,
         }
     }
 }

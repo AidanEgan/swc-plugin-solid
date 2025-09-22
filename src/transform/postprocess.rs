@@ -4,16 +4,16 @@ use swc_core::{
     atoms::Atom,
     common::{SyntaxContext, DUMMY_SP},
     ecma::ast::{
-        BindingIdent, CallExpr, Callee, Expr, ExprOrSpread, Ident, ImportDecl,
+        BindingIdent, CallExpr, Callee, Expr, ExprOrSpread, ExprStmt, Ident, ImportDecl,
         ImportNamedSpecifier, ImportPhase, ImportSpecifier, Lit, ModuleDecl, ModuleExportName,
-        ModuleItem, Pat, VarDecl, VarDeclKind, VarDeclarator,
+        ModuleItem, Pat, Stmt, VarDecl, VarDeclKind, VarDeclarator,
     },
 };
 
 use crate::helpers::{
-    common_into_expressions::ident_name,
+    common_into_expressions::{ident_callee, ident_name},
     generate_var_names::{
-        generate_import_name, generate_template_expr_name, generate_template_name,
+        generate_import_name, generate_template_expr_name, generate_template_name, DELEGATE_EVENTS,
     },
 };
 
@@ -102,4 +102,29 @@ pub fn add_imports(
             .map(|imp| generic_import(imp.into(), &module_name)),
     );
     stmts
+}
+
+pub fn add_events(events: &mut BTreeSet<String>) -> Option<ModuleItem> {
+    if events.is_empty() {
+        None
+    } else {
+        let events_arr: Vec<ExprOrSpread> = std::mem::take(events)
+            .into_iter()
+            .map(|e| ExprOrSpread {
+                spread: None,
+                expr: Ident::from(e).into(),
+            })
+            .collect();
+        let exp = CallExpr {
+            span: DUMMY_SP,
+            ctxt: SyntaxContext::empty(),
+            callee: ident_callee(DELEGATE_EVENTS.into()),
+            args: events_arr,
+            type_args: None,
+        };
+        Some(ModuleItem::Stmt(Stmt::Expr(ExprStmt {
+            span: DUMMY_SP,
+            expr: exp.into(),
+        })))
+    }
 }

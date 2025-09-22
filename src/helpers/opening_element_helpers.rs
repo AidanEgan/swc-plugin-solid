@@ -3,13 +3,19 @@ use swc_core::{
     ecma::ast::{JSXAttrName, JSXAttrOrSpread, JSXOpeningElement},
 };
 
-pub fn parse_attrs(opening_el: &mut JSXOpeningElement) -> Vec<(Option<Atom>, JSXAttrOrSpread)> {
-    opening_el
+pub fn parse_attrs(
+    opening_el: &mut JSXOpeningElement,
+) -> (Vec<(Option<Atom>, JSXAttrOrSpread)>, bool) {
+    let mut has_spread = false;
+    let res = opening_el
         .attrs
         .drain(..)
         .map(|attr_or_spread| {
             let name = match &attr_or_spread {
-                JSXAttrOrSpread::SpreadElement(_) => None,
+                JSXAttrOrSpread::SpreadElement(_) => {
+                    has_spread = true;
+                    None
+                }
                 JSXAttrOrSpread::JSXAttr(a) => {
                     let name = match &a.name {
                         JSXAttrName::Ident(i) => i.sym.clone(),
@@ -20,5 +26,6 @@ pub fn parse_attrs(opening_el: &mut JSXOpeningElement) -> Vec<(Option<Atom>, JSX
             };
             (name, attr_or_spread)
         })
-        .collect()
+        .collect();
+    (res, has_spread)
 }

@@ -2,7 +2,7 @@ use swc_core::{
     atoms::Atom,
     common::{source_map::PURE_SP, SyntaxContext, DUMMY_SP},
     ecma::ast::{
-        Callee, Decl, Expr, ExprOrSpread, Ident, Stmt, VarDecl, VarDeclKind, VarDeclarator,
+        Callee, Decl, Expr, ExprOrSpread, Ident, Lit, Stmt, VarDecl, VarDeclKind, VarDeclarator,
     },
 };
 
@@ -15,12 +15,12 @@ pub fn ident_name(name: Atom, is_pure: bool) -> Ident {
     }
 }
 
-pub fn ident_expr(name: Atom) -> Expr {
-    Expr::Ident(ident_name(name, false))
+pub fn ident_expr(name: Atom) -> Box<Expr> {
+    Box::new(Expr::Ident(ident_name(name, false)))
 }
 
 pub fn ident_callee(name: Atom) -> Callee {
-    Callee::Expr(Box::new(ident_expr(name)))
+    Callee::Expr(ident_expr(name))
 }
 
 pub fn create_var_statement(decls: Vec<VarDeclarator>) -> Stmt {
@@ -31,4 +31,8 @@ pub fn create_var_statement(decls: Vec<VarDeclarator>) -> Stmt {
         declare: false,
         decls,
     })))
+}
+
+pub fn create_lit_str_expr(val: &str) -> Box<Expr> {
+    Expr::Lit(Lit::Str(val.into())).into()
 }

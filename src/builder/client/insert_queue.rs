@@ -1,10 +1,10 @@
 use swc_core::{
     common::{SyntaxContext, DUMMY_SP},
-    ecma::ast::{CallExpr, Callee, Expr, ExprStmt, Lit, Null, Stmt},
+    ecma::ast::{CallExpr, Callee, Expr, ExprOrSpread, ExprStmt, Lit, Null, Stmt},
 };
 
 use crate::{
-    builder::client::builder_helpers::{expr_or_spread, name_as_expr},
+    builder::client::builder_helpers::name_as_expr,
     helpers::generate_var_names::{generate_el, generate_insert},
 };
 
@@ -57,20 +57,18 @@ pub enum PossibleInsert {
     Undefined,
 }
 fn create_insert_expr(insert: InsertBuilder, before: PossibleInsert) -> Box<Expr> {
-    let before = match before {
-        PossibleInsert::At(dom_el_id) => expr_or_spread(name_as_expr(generate_el(dom_el_id))), // DOM Element
-        PossibleInsert::Null => {
-            expr_or_spread(Box::new(Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))))
-        }
-        PossibleInsert::Undefined => expr_or_spread(name_as_expr("undefined".into())),
+    let before: ExprOrSpread = match before {
+        PossibleInsert::At(dom_el_id) => name_as_expr(generate_el(dom_el_id)).into(), // DOM Element
+        PossibleInsert::Null => Box::new(Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))).into(),
+        PossibleInsert::Undefined => name_as_expr("undefined".into()).into(),
     };
     Box::new(Expr::Call(CallExpr {
         span: DUMMY_SP,
         ctxt: SyntaxContext::empty(),
         callee: Callee::Expr(name_as_expr(generate_insert())),
         args: vec![
-            expr_or_spread(name_as_expr(generate_el(insert.parent_el))), // Parent
-            expr_or_spread(insert.expr),                                 // Expression
+            name_as_expr(generate_el(insert.parent_el)).into(), // Parent
+            insert.expr.into(),                                 // Expression
             before,
             // There is also an 'initial' arg but i dont think client rendering uses it
         ],

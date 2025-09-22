@@ -6,15 +6,8 @@ use super::parent_visitor::ParentVisitor;
 use crate::builder::jsx_builder::JsxBuilder;
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{ArrayLit, Expr, ExprOrSpread, JSXElementChild, JSXExpr, Lit, Str},
+    ecma::ast::{ArrayLit, Expr, JSXElementChild, JSXExpr, Lit, Str},
 };
-
-fn box_expr_to_expr_or_spread(expr: Box<Expr>) -> Option<ExprOrSpread> {
-    Some(ExprOrSpread { spread: None, expr })
-}
-fn expr_to_expr_or_spread(expr: Expr) -> Option<ExprOrSpread> {
-    box_expr_to_expr_or_spread(Box::new(expr))
-}
 
 // Could be more in the future
 pub enum CreateNewExprError {
@@ -49,17 +42,17 @@ fn create_new_expr_possible<T: ParentVisitor>(
                 let transformed_elems = e.children.iter().map(|el| {
                     match el {
                         JSXElementChild::JSXElement(jsx) => {
-                            expr_to_expr_or_spread(Expr::JSXElement(jsx.clone()))
+                            Some(Expr::JSXElement(jsx.clone()).into())
                         }
                         JSXElementChild::JSXFragment(frag) => {
-                            expr_to_expr_or_spread(Expr::JSXFragment(frag.clone()))
+                            Some(Expr::JSXFragment(frag.clone()).into())
                         }
                         JSXElementChild::JSXSpreadChild(spr) => {
                             // Add spread name
-                            box_expr_to_expr_or_spread(spr.expr.clone())
+                            Some(spr.expr.clone().into())
                         }
                         JSXElementChild::JSXExprContainer(cont) => match cont.expr.clone() {
-                            JSXExpr::Expr(e) => box_expr_to_expr_or_spread(e),
+                            JSXExpr::Expr(e) => Some(e.into()),
                             JSXExpr::JSXEmptyExpr(_) => None,
                         },
                         JSXElementChild::JSXText(txt) => {
@@ -68,7 +61,7 @@ fn create_new_expr_possible<T: ParentVisitor>(
                                 value: txt.value.as_str().trim().into(),
                                 raw: None,
                             };
-                            expr_to_expr_or_spread(Expr::Lit(Lit::Str(val)))
+                            Some(Expr::Lit(Lit::Str(val)).into())
                         }
                     }
                 });
