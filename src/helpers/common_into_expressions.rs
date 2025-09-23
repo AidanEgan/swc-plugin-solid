@@ -1,9 +1,7 @@
 use swc_core::{
     atoms::Atom,
     common::{source_map::PURE_SP, SyntaxContext, DUMMY_SP},
-    ecma::ast::{
-        Callee, Decl, Expr, ExprOrSpread, Ident, Lit, Stmt, VarDecl, VarDeclKind, VarDeclarator,
-    },
+    ecma::ast::{Callee, Decl, Expr, Ident, Lit, Stmt, VarDecl, VarDeclKind, VarDeclarator},
 };
 
 pub fn ident_name(name: Atom, is_pure: bool) -> Ident {

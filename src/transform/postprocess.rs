@@ -1,10 +1,10 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
 use swc_core::{
     atoms::Atom,
     common::{SyntaxContext, DUMMY_SP},
     ecma::ast::{
-        BindingIdent, CallExpr, Callee, Expr, ExprOrSpread, ExprStmt, Ident, ImportDecl,
+        ArrayLit, BindingIdent, CallExpr, Callee, Expr, ExprOrSpread, ExprStmt, Ident, ImportDecl,
         ImportNamedSpecifier, ImportPhase, ImportSpecifier, Lit, ModuleDecl, ModuleExportName,
         ModuleItem, Pat, Stmt, VarDecl, VarDeclKind, VarDeclarator,
     },
@@ -108,18 +108,24 @@ pub fn add_events(events: &mut BTreeSet<String>) -> Option<ModuleItem> {
     if events.is_empty() {
         None
     } else {
-        let events_arr: Vec<ExprOrSpread> = std::mem::take(events)
+        let events_arr: Vec<Option<ExprOrSpread>> = std::mem::take(events)
             .into_iter()
-            .map(|e| ExprOrSpread {
-                spread: None,
-                expr: Ident::from(e).into(),
+            .map(|e| {
+                Some(ExprOrSpread {
+                    spread: None,
+                    expr: Expr::Lit(Lit::Str(e.into())).into(),
+                })
             })
             .collect();
         let exp = CallExpr {
             span: DUMMY_SP,
             ctxt: SyntaxContext::empty(),
             callee: ident_callee(DELEGATE_EVENTS.into()),
-            args: events_arr,
+            args: vec![Expr::Array(ArrayLit {
+                span: DUMMY_SP,
+                elems: events_arr,
+            })
+            .into()],
             type_args: None,
         };
         Some(ModuleItem::Stmt(Stmt::Expr(ExprStmt {

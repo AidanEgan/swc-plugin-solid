@@ -19,4 +19,5 @@ pub trait ParentVisitor {
     fn register_event(&mut self, event: Cow<str>);
     fn add_import(&mut self, import_name: Cow<str>);
     fn get_var_if_in_scope(&self, var: &Atom) -> Option<&TrackedVariable>;
+    fn add_event(&mut self, event_name: Cow<str>);
 }

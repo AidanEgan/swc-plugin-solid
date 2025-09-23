@@ -12,14 +12,14 @@ use crate::{
             effect_builder::EffectBuilder,
             element_properties::ElementPropertiesBuilder,
             insert_queue::{InsertBuilder, InsertQueue, PossibleInsert},
+            jsx_expr_transformer_client::ClientJsxExprTransformer,
         },
         parser_types::{JsxFragmentMetadata, PossiblePlaceholders},
     },
-    helpers::generate_var_names::generate_template_name,
+    helpers::generate_var_names::{generate_effect, generate_insert, generate_template_name},
     transform::parent_visitor::ParentVisitor,
 };
 
-use std::collections::HashMap;
 use swc_core::{
     common::{util::take::Take, SyntaxContext, DUMMY_SP},
     ecma::ast::{
@@ -55,15 +55,22 @@ fn add_opening(
     templ_string: &mut String,
     parent_element_stack: &mut Vec<usize>,
     opening_el: &str,
-    props: &mut HashMap<String, String>,
+    props: Option<Vec<(String, String)>>,
     count: usize,
 ) {
     parent_element_stack.push(count);
     *templ_string += "<";
     *templ_string += opening_el;
-    props.drain().for_each(|(k, v)| {
-        *templ_string += format!(" {0}={1}", k, v).as_str();
-    });
+    if let Some(props) = props {
+        props.into_iter().for_each(|(k, v)| {
+            if v.contains(" ") {
+                // Keep and escape
+                *templ_string += format!(r#" {0}="{1}""#, k, v).as_str();
+            } else {
+                *templ_string += format!(" {0}={1}", k, v).as_str();
+            }
+        });
+    }
     *templ_string += ">";
 }
 
@@ -159,20 +166,34 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
         let count = *(parent_visitor.element_count());
         match part {
             JsxTemplateKind::Opening(open) => {
-                needs_long_form = needs_long_form || !open.attrs.is_empty();
                 add_closes(&mut templ_string, &mut closing_el_builder);
-                let mut property_builder =
-                    ElementPropertiesBuilder::new(parent_visitor, &mut effect_builder);
 
-                let el_name = property_builder.build_el_property_statements(open, count);
-                for to_insert in property_builder.statements.drain(..) {
-                    block_builder.add_stmt(to_insert);
-                }
+                let num_els = open.attrs.len();
+                let (el_name, tmpl_inserts) = if num_els > 0 {
+                    let mut property_builder =
+                        ElementPropertiesBuilder::new(parent_visitor, &mut effect_builder);
+                    let name = property_builder.build_el_property_statements(open, count);
+                    // "Long form omitted if all properties were inlined"
+                    needs_long_form = needs_long_form
+                        || (num_els != property_builder.direct_template_inserts.len());
+                    for to_insert in property_builder.statements.drain(..) {
+                        block_builder.add_stmt(to_insert);
+                    }
+                    (
+                        name,
+                        Some(std::mem::take(
+                            &mut property_builder.direct_template_inserts,
+                        )),
+                    )
+                } else {
+                    (open.value, None)
+                };
+
                 add_opening(
                     &mut templ_string,
                     &mut parent_element_stack,
                     &el_name,
-                    &mut property_builder.direct_template_inserts,
+                    tmpl_inserts,
                     count,
                 );
                 block_builder.add_decl(count);
@@ -215,7 +236,12 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
                             // TODO YOU NEED TO BUILD THE INSERT CALLEXPR AND WRAP THIS IN IT!
                             Some(client_builder.build_and_wrap_custom_component())
                         }
-                        Some(PossiblePlaceholders::Expression(e)) => Some(e),
+                        // TODO TRANSFORM EXPR
+                        Some(PossiblePlaceholders::Expression(mut e)) => {
+                            let mut t = ClientJsxExprTransformer::new(parent_visitor, true, false);
+                            t.visit_and_wrap_outer_expr(&mut e);
+                            Some(e)
+                        }
                         Some(PossiblePlaceholders::Fragment(f)) => Some(
                             standard_build_res_wrappings(handle_fragment_chunks(f, parent_visitor)),
                         ),
@@ -254,6 +280,10 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
         );
         return BuildResults::Id(name);
     }
+    insert_queue.drain_insert_queue(PossibleInsert::Undefined, block_builder.get_final_stmts());
+    if insert_queue.used_insert {
+        parent_visitor.add_import(generate_insert().as_str().into());
+    }
     // Does need long form
     // This should always be true - Rust just likes to be very sure :)
     // Save for return stmt
@@ -262,7 +292,8 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
     // Check for effects
     let mut property_builder = ElementPropertiesBuilder::new(parent_visitor, &mut effect_builder);
     if let Some(stmt) = property_builder.build_effect_statement() {
-        block_builder.add_stmt(stmt);
+        parent_visitor.add_import(generate_effect().as_str().into());
+        block_builder.add_penultimate_stmt(stmt);
     };
     BuildResults::Block(BlockStmt {
         span: DUMMY_SP,

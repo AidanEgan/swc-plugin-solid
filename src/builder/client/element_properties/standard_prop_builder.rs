@@ -1,7 +1,7 @@
 use swc_core::{
     atoms::Atom,
     common::{SyntaxContext, DUMMY_SP},
-    ecma::ast::{CallExpr, Expr, ExprStmt, Lit, Stmt},
+    ecma::ast::{CallExpr, ExprStmt, Stmt},
 };
 
 use crate::{
@@ -23,17 +23,17 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
         element_count: usize,
         data: PossibleEffectStatement,
     ) {
-        self.used_events
-            .insert(generate_set_attribute().as_str().into());
         let (data, effect_vars) = match self.effect_or_inline_or_expr(data) {
             EffectOrInlineOrExpression::EffectRes((data, effect_vars)) => (data, Some(effect_vars)),
             EffectOrInlineOrExpression::ExpressionRes(data) => (data, None),
             EffectOrInlineOrExpression::InlineRes(ir) => {
                 self.direct_template_inserts
-                    .insert(prop_name.as_str().into(), ir);
+                    .push((prop_name.as_str().into(), ir));
                 return;
             }
         };
+        self.parent_visitor
+            .add_import(generate_set_attribute().as_str().into());
         let set_attribute = CallExpr {
             span: DUMMY_SP,
             ctxt: SyntaxContext::empty(),

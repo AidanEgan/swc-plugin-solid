@@ -112,6 +112,19 @@ mod tests {
             },
         );
     }
+    fn std_format_test(folder: &str, input_file: &str) {
+        let is_ts = input_file.ends_with("tsx") || input_file.ends_with("ts");
+        let input = format!("tests/{0}/{1}", folder, input_file);
+        let output = format!(
+            "tests/{0}/{1}_output.{2}",
+            folder,
+            input_file
+                .split_at(input_file.find(".").expect("invalid file name"))
+                .0,
+            if is_ts { "ts" } else { "js" }
+        );
+        basic_test(input.as_str(), output.as_str(), is_ts);
+    }
 
     #[test]
     fn basic_template_test_js() {
@@ -125,19 +138,31 @@ mod tests {
 
     #[test]
     fn basic_custom_component() {
-        basic_test(
-            "tests/basic/custom.jsx",
-            "tests/basic/custom_output.js",
-            false,
-        );
+        std_format_test("basic", "custom.jsx");
     }
 
     #[test]
     fn complex_custom_component() {
-        basic_test(
-            "tests/basic/custom_complex.jsx",
-            "tests/basic/custom_complex_output.js",
-            false,
-        );
+        std_format_test("basic", "custom_complex.jsx");
+    }
+
+    #[test]
+    fn hello_world_component() {
+        std_format_test("components", "hello_world.tsx");
+    }
+
+    #[test]
+    fn hello_world_component_variant_one() {
+        std_format_test("components", "hello_world_variant_one.tsx");
+    }
+
+    #[test]
+    fn basic_ref_test() {
+        std_format_test("components", "with_ref.tsx");
+    }
+
+    #[test]
+    fn class_test() {
+        std_format_test("components", "class_name_test.tsx");
     }
 }

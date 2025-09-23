@@ -139,10 +139,14 @@ impl VisitMut for ClientJsxElementVisitor {
     }
 
     fn visit_mut_jsx_text(&mut self, node: &mut swc_core::ecma::ast::JSXText) {
-        // Just get rid of newlines because they will be a problem for the template
         // POSSIBLE OPTIMIZATION: Could just 'trim' the string and omit empty JSX Text values?
-        let transformed = node.value.replace(['\n', '\r'], "");
-        self.template.push(JsxTemplateKind::Text(transformed));
+        let trimmed = node.value.trim();
+        if !trimmed.is_empty() {
+            // Get rid of newlines because they will be a problem for the template
+            //let transformed = node.value.replace(['\n', '\r'], "");
+            self.template
+                .push(JsxTemplateKind::Text(trimmed.to_string()));
+        }
     }
 
     /* Nothing to do?
@@ -159,8 +163,9 @@ impl VisitMut for ClientJsxElementVisitor {
     fn visit_jsx_member_expr(&mut self, node: &swc_core::ecma::ast::JSXMemberExpr) {
 
     }
-    */
+
     fn visit_mut_jsx_attr(&mut self, node: &mut swc_core::ecma::ast::JSXAttr) {}
+    */
 }
 
 impl ClientJsxElementVisitor {

@@ -9,15 +9,11 @@ use swc_core::{
 };
 
 use crate::{
-    builder::client::{
-        builder_helpers::{wrap_in_arrow, wrap_in_empty_arrow},
-        element_properties::ElementPropertiesBuilder,
-    },
+    builder::client::builder_helpers::{wrap_in_arrow, wrap_in_empty_arrow},
     helpers::{
         common_into_expressions::{ident_callee, ident_expr},
         generate_var_names::{generate_effect, generate_effect_arg},
     },
-    transform::parent_visitor::ParentVisitor,
 };
 
 #[derive(Debug)]

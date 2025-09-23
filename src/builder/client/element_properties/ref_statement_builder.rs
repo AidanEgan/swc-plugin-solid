@@ -11,7 +11,7 @@ use crate::{
     builder::client::element_properties::{generate_use_expr, ElementPropertiesBuilder},
     helpers::{
         common_into_expressions::{ident_callee, ident_expr, ident_name},
-        generate_var_names::{generate_el, generate_ref},
+        generate_var_names::{generate_el, generate_ref, generate_use},
     },
     transform::parent_visitor::ParentVisitor,
 };
@@ -23,7 +23,7 @@ pub fn create_ref_statements(
     local_ref_count: &mut usize,
     element_count: Option<usize>,
     ref_expr: Box<Expr>,
-) -> Option<Box<Expr>> {
+) -> (Option<Box<Expr>>, bool) {
     /*
      * Custom
      * ref(r$) {
@@ -39,18 +39,20 @@ pub fn create_ref_statements(
      * -- AS FN --
      * _$use(x => setValue(x), _el$4);
     */
+    let mut import_use = false;
 
     // As fn
     if ref_expr.is_arrow() || ref_expr.is_fn_expr() {
         if element_count.is_none() {
             // Terminate early for custom component
-            return Some(ref_expr);
+            return (Some(ref_expr), import_use);
         }
+        import_use = true;
         statements.push(Stmt::Expr(ExprStmt {
             span: DUMMY_SP,
             expr: generate_use_expr(vec![ref_expr.into()]),
         }));
-        return None;
+        return (None, import_use);
     }
     // Will be declaring refs
     *local_ref_count += 1;
@@ -75,6 +77,7 @@ pub fn create_ref_statements(
     }))));
 
     let function_ternary_arm = if let Some(element_count) = element_count {
+        import_use = true;
         generate_use_expr(vec![
             ident_expr(generate_ref(*local_ref_count)).into(),
             ident_expr(generate_el(element_count)).into(),
@@ -139,20 +142,20 @@ pub fn create_ref_statements(
         span: DUMMY_SP,
         expr: Box::new(finalized_expr),
     }));
-    None
+    (None, import_use)
 }
 
 impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
-    pub fn ref_builder(
-        &mut self,
-        element_count: Option<usize>,
-        ref_expr: Box<Expr>,
-    ) -> Option<Box<Expr>> {
-        create_ref_statements(
+    pub fn ref_builder(&mut self, element_count: Option<usize>, ref_expr: Box<Expr>) {
+        let (_, used_use) = create_ref_statements(
             &mut self.statements,
             self.parent_visitor.ref_count(),
             element_count,
             ref_expr,
-        )
+        );
+        if used_use {
+            self.parent_visitor
+                .add_import(generate_use().as_str().into());
+        };
     }
 }

@@ -6,11 +6,9 @@ use crate::transform::postprocess::{add_events, add_imports, create_template_dec
 use crate::transform::scope_manager::{ScopeManager, TrackedVariable};
 use crate::{config::PluginArgs, helpers::should_skip::should_skip};
 use std::borrow::Cow;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use swc_core::common::Spanned;
-use swc_core::ecma::ast::{
-    BlockStmt, Decl, FnDecl, Function, ModuleItem, Pat, Program, Stmt, VarDecl,
-};
+use swc_core::ecma::ast::{BlockStmt, Decl, FnDecl, Function, ModuleItem, Program, Stmt, VarDecl};
 use swc_core::ecma::visit::VisitMutWith;
 use swc_core::{
     common::{comments::Comments, SourceMapper},
@@ -83,6 +81,11 @@ impl<C: Clone + Comments, S: SourceMapper> ParentVisitor for SolidJsVisitor<C, S
     fn add_import(&mut self, import_name: Cow<str>) {
         if !self.imports.contains(import_name.as_ref()) {
             self.imports.insert(import_name.into_owned());
+        }
+    }
+    fn add_event(&mut self, event_name: Cow<str>) {
+        if !self.events.contains(event_name.as_ref()) {
+            self.events.insert(event_name.into_owned());
         }
     }
     fn get_var_if_in_scope(&self, var: &swc_core::atoms::Atom) -> Option<&TrackedVariable> {

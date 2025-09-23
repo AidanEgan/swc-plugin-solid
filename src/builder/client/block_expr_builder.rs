@@ -106,6 +106,14 @@ impl BlockExprBuilder {
         self.final_stmts.push(stmt);
     }
 
+    pub fn add_penultimate_stmt(&mut self, stmt: Stmt) {
+        self.final_stmts.push(stmt);
+        let len = self.final_stmts.len();
+        if len > 1 {
+            self.final_stmts.swap(len - 1, len - 2);
+        }
+    }
+
     pub fn take_final_stmts(&mut self) -> Vec<Stmt> {
         let mut blank: Vec<Stmt> = Vec::new();
         std::mem::swap(&mut blank, self.get_final_stmts());

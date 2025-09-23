@@ -19,13 +19,13 @@ const CLASS: &str = "class";
 
 impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
     pub fn class_builder(&mut self, element_count: usize, data: PossibleEffectStatement) {
-        self.used_events
-            .insert(generate_class_name().as_str().into());
+        let class_name = generate_class_name();
+        self.parent_visitor.add_import(class_name.as_str().into());
         let (data, effect_vars) = match self.effect_or_inline_or_expr(data) {
             EffectOrInlineOrExpression::EffectRes((data, effect_vars)) => (data, Some(effect_vars)),
             EffectOrInlineOrExpression::ExpressionRes(data) => (data, None),
             EffectOrInlineOrExpression::InlineRes(ir) => {
-                self.direct_template_inserts.insert(CLASS.into(), ir);
+                self.direct_template_inserts.push((CLASS.into(), ir));
                 return;
             }
         };

@@ -14,9 +14,7 @@ use swc_core::{
 use crate::{
     builder::{
         client::{
-            element_properties::{
-                ref_statement_builder::create_ref_statements, ElementPropertiesBuilder,
-            },
+            element_properties::ref_statement_builder::create_ref_statements,
             jsx_expr_builder_client::{
                 build_js_from_client_jsx, standard_build_res_wrappings, BuildResults,
             },
@@ -94,7 +92,8 @@ fn build_props_oject_expr(props: Vec<(Atom, Box<Expr>)>) -> Box<Expr> {
             if key.as_str() == REF_RAW {
                 // No transformation done, ownership of expr moves back here
                 if let Some(returned_val) =
-                    create_ref_statements(&mut statements, &mut 0, None, val)
+                    // "Other tuple val returns '_use' usage not needed here"
+                    create_ref_statements(&mut statements, &mut 0, None, val).0
                 {
                     val = returned_val;
                 } else {

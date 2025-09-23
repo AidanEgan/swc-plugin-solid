@@ -1,6 +1,6 @@
 use swc_core::ecma::{
     ast::{Expr, JSXElement, JSXFragment},
-    visit::{Visit, VisitMut, VisitMutWith, VisitWith},
+    visit::VisitMutWith,
 };
 
 use crate::builder::client::{

@@ -11,6 +11,7 @@ use crate::{
 pub struct InsertQueue {
     pub queue: Vec<InsertBuilder>,
     pub was_first_el: bool,
+    pub used_insert: bool,
 }
 
 impl InsertQueue {
@@ -18,9 +19,12 @@ impl InsertQueue {
         Self {
             queue: vec![],
             was_first_el: false,
+            used_insert: false,
         }
     }
     pub fn drain_insert_queue(&mut self, before: PossibleInsert, tmp_stmts: &mut Vec<Stmt>) {
+        // Tells if needs insert import
+        self.used_insert = self.used_insert || !self.queue.is_empty();
         let before = match before {
             PossibleInsert::Null => {
                 if self.was_first_el && self.queue.len() == 1 {
@@ -57,21 +61,27 @@ pub enum PossibleInsert {
     Undefined,
 }
 fn create_insert_expr(insert: InsertBuilder, before: PossibleInsert) -> Box<Expr> {
-    let before: ExprOrSpread = match before {
-        PossibleInsert::At(dom_el_id) => name_as_expr(generate_el(dom_el_id)).into(), // DOM Element
-        PossibleInsert::Null => Box::new(Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))).into(),
-        PossibleInsert::Undefined => name_as_expr("undefined".into()).into(),
+    let before: Option<ExprOrSpread> = match before {
+        PossibleInsert::At(dom_el_id) => Some(name_as_expr(generate_el(dom_el_id)).into()), // DOM Element
+        PossibleInsert::Null => {
+            Some(Box::new(Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))).into())
+        }
+        PossibleInsert::Undefined => None, //name_as_expr("undefined".into()).into(),
+    };
+    let mut args: Vec<ExprOrSpread> = vec![
+        name_as_expr(generate_el(insert.parent_el)).into(), // Parent
+        insert.expr.into(),                                 // Expression
+                                                            // Add before if applicable
+                                                            // There is also an 'initial' arg but i dont think client rendering uses it
+    ];
+    if let Some(before) = before {
+        args.push(before);
     };
     Box::new(Expr::Call(CallExpr {
         span: DUMMY_SP,
         ctxt: SyntaxContext::empty(),
         callee: Callee::Expr(name_as_expr(generate_insert())),
-        args: vec![
-            name_as_expr(generate_el(insert.parent_el)).into(), // Parent
-            insert.expr.into(),                                 // Expression
-            before,
-            // There is also an 'initial' arg but i dont think client rendering uses it
-        ],
+        args,
         type_args: None,
     }))
 }

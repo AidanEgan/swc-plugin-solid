@@ -12,15 +12,13 @@ pub mod ref_statement_builder;
 pub mod standard_prop_builder;
 pub mod style_builder;
 
-use std::collections::{HashMap, HashSet};
 use swc_core::{
     atoms::Atom,
     common::{SyntaxContext, DUMMY_SP},
     ecma::{
         ast::{
             AssignExpr, AssignTarget, BinExpr, CallExpr, Expr, ExprOrSpread, ExprStmt, Ident,
-            JSXAttr, JSXAttrOrSpread, JSXAttrValue, JSXOpeningElement, Lit, MemberExpr,
-            SimpleAssignTarget, Stmt,
+            JSXAttrOrSpread, JSXAttrValue, Lit, MemberExpr, SimpleAssignTarget, Stmt,
         },
         visit::VisitMutWith,
     },
@@ -112,9 +110,7 @@ fn generate_use_expr(args: Vec<ExprOrSpread>) -> Box<Expr> {
 #[derive(Debug)]
 pub struct ElementPropertiesBuilder<'a, T: ParentVisitor> {
     pub statements: Vec<Stmt>,
-    pub used_imports: HashSet<String>,
-    pub used_events: HashSet<String>,
-    pub direct_template_inserts: HashMap<String, String>,
+    pub direct_template_inserts: Vec<(String, String)>,
     pub parent_visitor: &'a mut T,
     effect_builder: &'a mut EffectBuilder,
     tmp_wrap_effect: bool,
@@ -122,7 +118,7 @@ pub struct ElementPropertiesBuilder<'a, T: ParentVisitor> {
 
 // Implements many fns for different types of properties
 // See 'element properties' folder
-impl<'a, 'b, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
+impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
     fn effect_or_inline_or_expr(
         &mut self,
         data: PossibleEffectStatement,
@@ -167,16 +163,18 @@ impl<'a, 'b, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
     pub fn new(parent_visitor: &'a mut T, effect_builder: &'a mut EffectBuilder) -> Self {
         Self {
             statements: vec![],
-            used_imports: HashSet::new(),
-            used_events: HashSet::new(),
-            direct_template_inserts: HashMap::new(),
+            direct_template_inserts: Vec::new(),
             parent_visitor,
             effect_builder,
             tmp_wrap_effect: false,
         }
     }
 
-    pub fn std_transform(&mut self, attr: JSXAttrOrSpread) -> Box<Expr> {
+    pub fn std_transform(
+        &mut self,
+        attr: JSXAttrOrSpread,
+        transform_call_exprs: bool,
+    ) -> Box<Expr> {
         match attr {
             JSXAttrOrSpread::JSXAttr(jsxattr) => match jsxattr.value {
                 Some(JSXAttrValue::JSXElement(mut jsxe)) => {
@@ -200,9 +198,16 @@ impl<'a, 'b, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                         // Undefined behavior seemingly
                         swc_core::ecma::ast::JSXExpr::JSXEmptyExpr(_) => Box::new(Expr::default()),
                         swc_core::ecma::ast::JSXExpr::Expr(mut expr) => {
-                            let mut sub_visitor =
-                                ClientJsxExprTransformer::new(self.parent_visitor, false, true);
-                            sub_visitor.visit_and_wrap_outer_expr(&mut expr);
+                            let mut sub_visitor = ClientJsxExprTransformer::new(
+                                self.parent_visitor,
+                                transform_call_exprs,
+                                true,
+                            );
+                            if transform_call_exprs {
+                                sub_visitor.visit_and_wrap_outer_expr(&mut expr);
+                            } else {
+                                expr.visit_mut_with(&mut sub_visitor);
+                            }
                             self.tmp_wrap_effect = sub_visitor.should_wrap_in_effect;
                             expr
                         }
@@ -221,7 +226,9 @@ impl<'a, 'b, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
 
     pub fn build_effect_statement(&mut self) -> Option<Stmt> {
         let mut data = std::mem::take(&mut self.effect_builder.data);
-        if data.len() == 1 {
+        if data.is_empty() {
+            return None;
+        } else if data.len() == 1 {
             let raw = data.pop().unwrap();
             match raw.variant {
                 super::effect_builder::EffectVariant::Class => {
@@ -290,25 +297,28 @@ impl<'a, 'b, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
             todo!("")
         } else {
             for (name, attr) in data.attrs {
-                let expr = self.std_transform(attr);
                 match name
                     .expect("All non-spread properties should have a name")
                     .as_str()
                 {
                     "class" | "className" => {
-                        let data = if self.tmp_wrap_effect {
+                        let expr = self.std_transform(attr, false);
+                        if self.tmp_wrap_effect {
                             let assigned_v = self.parent_visitor.v_count();
                             let assigned_prop = self.effect_builder.get_new_obj();
-                            let res = PossibleEffectStatement::Effect((
-                                generate_v(*assigned_v).into(),
-                                assigned_prop,
-                            ));
+                            self.effect_builder.data.push(EffectMetadata {
+                                expr,
+                                v_val: generate_v(*assigned_v).into(),
+                                obj: assigned_prop,
+                                variant: super::effect_builder::EffectVariant::Class,
+                                count: element_count,
+                                name: "class".into(),
+                            });
+
                             *assigned_v += 1;
-                            res
-                        } else {
-                            PossibleEffectStatement::Std(expr)
+                            continue;
                         };
-                        self.class_builder(element_count, data);
+                        self.class_builder(element_count, PossibleEffectStatement::Std(expr));
                     }
                     "classList" => {
                         todo!("Implement class list object")
@@ -317,14 +327,35 @@ impl<'a, 'b, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                         todo!("parse out individual styles")
                     }
                     "ref" => {
+                        let expr = self.std_transform(attr, true);
                         self.ref_builder(Some(element_count), expr);
                     }
                     prop => {
+                        let expr = self.std_transform(attr, true);
                         // Event handling
                         if prop.starts_with("on") {
                             self.event_handler_builder(prop, element_count, expr);
                         } else {
-                            todo!();
+                            if self.tmp_wrap_effect {
+                                let assigned_v = self.parent_visitor.v_count();
+                                let assigned_prop = self.effect_builder.get_new_obj();
+                                self.effect_builder.data.push(EffectMetadata {
+                                    expr,
+                                    v_val: generate_v(*assigned_v).into(),
+                                    obj: assigned_prop,
+                                    variant: super::effect_builder::EffectVariant::Std,
+                                    count: element_count,
+                                    name: prop.into(),
+                                });
+
+                                *assigned_v += 1;
+                                continue;
+                            };
+                            self.standard_prop_builder(
+                                prop.into(),
+                                element_count,
+                                PossibleEffectStatement::Std(expr),
+                            );
                         }
                     }
                 }
