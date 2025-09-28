@@ -17,7 +17,7 @@ use crate::{
         common_into_expressions::{create_lit_str_expr, ident_callee, ident_expr, ident_name},
         generate_var_names::{generate_add_event_listener, generate_el, DELEGATE_EVENTS},
     },
-    transform::parent_visitor::{self, ParentVisitor},
+    transform::parent_visitor::ParentVisitor,
 };
 
 const ADD_EVENT_LISTENER: &str = "addEventListener";

@@ -10,11 +10,15 @@ use swc_core::{
     },
 };
 
-use crate::helpers::{
-    common_into_expressions::{ident_callee, ident_name},
-    generate_var_names::{
-        generate_import_name, generate_template_expr_name, generate_template_name, DELEGATE_EVENTS,
+use crate::{
+    helpers::{
+        common_into_expressions::{ident_callee, ident_name},
+        generate_var_names::{
+            generate_import_name, generate_template_expr_name, generate_template_name,
+            DELEGATE_EVENTS,
+        },
     },
+    transform::TemplateMetaData,
 };
 
 fn empty_var_decl() -> VarDeclarator {
@@ -36,12 +40,30 @@ fn empty_var_decl() -> VarDeclarator {
 
 pub fn create_template_declarations(
     templates: &mut HashMap<String, usize>,
+    template_data: &mut HashMap<usize, TemplateMetaData>,
     num_templates: usize,
 ) -> VarDecl {
     let mut decls: Vec<VarDeclarator> = vec![empty_var_decl(); num_templates];
     // 2 assumptions that should always be true:
     // 1 <= i <= num_templates && i is unique
     for (template, i) in templates.drain() {
+        let (is_ce, is_svg) = template_data
+            .get(&i)
+            .map(|d| (d.is_ce, d.is_svg))
+            .unwrap_or((false, false));
+        let mut args = vec![ExprOrSpread {
+            spread: None,
+            expr: Box::new(Expr::Lit(Lit::Str(template.into()))),
+        }];
+        if is_ce || is_svg {
+            args.push(Expr::Lit(Lit::Bool(is_ce.into())).into());
+            args.push(Expr::Lit(Lit::Bool(is_svg.into())).into());
+            // Is mathml
+            // This is niche, and not even reflected in the fn types
+            // I assume it's not really used
+            args.push(Expr::Lit(Lit::Bool(false.into())).into());
+        }
+
         decls[i - 1].name.as_mut_ident().unwrap().id.sym = generate_template_name(i);
         decls[i - 1].init = Some(Box::new(Expr::Call(CallExpr {
             span: DUMMY_SP,
@@ -50,10 +72,7 @@ pub fn create_template_declarations(
                 generate_template_expr_name(),
                 true,
             )))),
-            args: vec![ExprOrSpread {
-                spread: None,
-                expr: Box::new(Expr::Lit(Lit::Str(template.into()))),
-            }],
+            args,
             type_args: None,
         })));
     }

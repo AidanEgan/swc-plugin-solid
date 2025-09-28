@@ -6,8 +6,7 @@ use swc_core::{
 
 use crate::{
     builder::client::element_properties::{
-        generate_effect_statement, EffectOrInlineOrExpression, ElementPropertiesBuilder,
-        PossibleEffectStatement,
+        EffectOrInlineOrExpression, ElementPropertiesBuilder, PossibleEffectStatement,
     },
     helpers::{
         common_into_expressions::{ident_callee, ident_expr},
@@ -47,7 +46,10 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
         };
         if let Some(effect_vars) = effect_vars {
             self.statements
-                .push(generate_effect_statement(effect_vars, set_attribute.into()));
+                .push(super::helpers::generate_effect_statement(
+                    effect_vars,
+                    set_attribute.into(),
+                ));
         } else {
             self.statements.push(Stmt::Expr(ExprStmt {
                 span: DUMMY_SP,

@@ -21,7 +21,7 @@ enum PossibleOption<'a, T> {
 }
 // This result contins the new expr + a bool marking if the new expr needs to be traversed
 // It will need to do that if there is some nested JSX that this fn will not parse out
-type Res = Result<(Box<Expr>, bool), CreateNewExprError>;
+type Res = Result<Box<Expr>, CreateNewExprError>;
 fn create_new_expr_possible<T: ParentVisitor>(
     old_val: PossibleOption<Expr>,
     attacher: &mut T,
@@ -69,7 +69,7 @@ fn create_new_expr_possible<T: ParentVisitor>(
                     span: DUMMY_SP,
                     elems: transformed_elems.collect(),
                 };
-                Ok((Box::new(Expr::Array(arr)), true))
+                Ok(Box::new(Expr::Array(arr)))
             }
         }
         /*

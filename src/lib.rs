@@ -165,4 +165,9 @@ mod tests {
     fn class_test() {
         std_format_test("components", "class_name_test.tsx");
     }
+
+    #[test]
+    fn style_test() {
+        std_format_test("basic", "style.jsx");
+    }
 }

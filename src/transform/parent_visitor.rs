@@ -15,7 +15,7 @@ pub trait ParentVisitor {
     fn get_built_ins(&self) -> &HashSet<String>;
     fn get_generate(&self) -> &str;
     fn get_is_hydratable(&self) -> bool;
-    fn get_template_id(&mut self, template: &str) -> usize;
+    fn register_template(&mut self, template: &str, is_ce: bool, is_svg: bool) -> usize;
     fn register_event(&mut self, event: Cow<str>);
     fn add_import(&mut self, import_name: Cow<str>);
     fn get_var_if_in_scope(&self, var: &Atom) -> Option<&TrackedVariable>;

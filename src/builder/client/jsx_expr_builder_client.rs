@@ -63,7 +63,10 @@ fn add_opening(
     *templ_string += opening_el;
     if let Some(props) = props {
         props.into_iter().for_each(|(k, v)| {
-            if v.contains(" ") {
+            if v.is_empty() {
+                *templ_string += " ";
+                *templ_string += k.as_str();
+            } else if v.contains(" ") {
                 // Keep and escape
                 *templ_string += format!(r#" {0}="{1}""#, k, v).as_str();
             } else {
@@ -150,6 +153,8 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
         }
     }
 
+    let mut templ_ce = false;
+    let mut templ_svg = false;
     let mut templ_string = String::new();
     let mut closing_el_builder = String::new();
 
@@ -163,9 +168,12 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
 
     // Build template string -> attach to parent visitor
     for part in parsed_data.template {
+        println!("{:?}", part);
         let count = *(parent_visitor.element_count());
         match part {
             JsxTemplateKind::Opening(open) => {
+                templ_ce = templ_ce || open.is_ce;
+                templ_svg = templ_svg || open.is_svg;
                 add_closes(&mut templ_string, &mut closing_el_builder);
 
                 let num_els = open.attrs.len();
@@ -200,6 +208,7 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
                 insert_queue
                     .drain_insert_queue(PossibleInsert::At(count), block_builder.get_final_stmts());
                 block_builder.set_kind(Kind::Open(count));
+                *(parent_visitor.element_count()) += 1;
             }
             JsxTemplateKind::Closing(close) => {
                 parent_element_stack.pop();
@@ -221,6 +230,7 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
                 insert_queue
                     .drain_insert_queue(PossibleInsert::At(count), block_builder.get_final_stmts());
                 block_builder.set_kind(Kind::Text(count));
+                *(parent_visitor.element_count()) += 1;
             }
             // Needs long form true
             JsxTemplateKind::Placeholder(p) => {
@@ -267,10 +277,8 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
                 ));
             }
         }
-        // Either frament or custom component. Both placeholder types
-        *(parent_visitor.element_count()) += 1;
     }
-    let temp_id = parent_visitor.get_template_id(templ_string.as_str());
+    let temp_id = parent_visitor.register_template(templ_string.as_str(), templ_ce, templ_svg);
     // Most basic case, just returns the tmplate string
     if !needs_long_form {
         let name = Ident::new(

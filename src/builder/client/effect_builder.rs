@@ -12,14 +12,14 @@ use crate::{
     builder::client::builder_helpers::{wrap_in_arrow, wrap_in_empty_arrow},
     helpers::{
         common_into_expressions::{ident_callee, ident_expr},
-        generate_var_names::{generate_effect, generate_effect_arg},
+        generate_var_names::{generate_effect, generate_effect_arg, generate_v},
     },
 };
 
 #[derive(Debug)]
 pub enum EffectVariant {
     Class,
-    Style,
+    Style(Option<PropName>),
     Std,
 }
 
@@ -84,19 +84,41 @@ impl EffectBuilder {
         }
     }
 
+    pub fn add_data(
+        &mut self,
+        expr: Box<Expr>,
+        variant: EffectVariant,
+        assigned_v: usize,
+        count: usize,
+        prop: &str,
+    ) {
+        let assigned_prop = self.get_new_obj();
+        self.data.push(EffectMetadata {
+            expr,
+            v_val: generate_v(assigned_v).into(),
+            obj: assigned_prop,
+            variant,
+            count,
+            name: prop.into(),
+        });
+    }
+
+    pub fn add_var_decl(&mut self, name: Atom, value: Option<Box<Expr>>) {
+        self.vars.decls.push(VarDeclarator {
+            span: DUMMY_SP,
+            name: Pat::Ident(BindingIdent {
+                // Don't HAVE to clone, but probs cheaper
+                id: name.into(),
+                type_ann: None,
+            }),
+            init: value,
+            definite: false,
+        });
+    }
+
+    // Pretty specific logic here really only meant to work with
+    // element properties builder. Was hard to break this logic up :(
     pub fn build_effect(&mut self, mut stmts: Vec<Stmt>) -> Option<Stmt> {
-        for datum in self.data.iter() {
-            self.vars.decls.push(VarDeclarator {
-                span: DUMMY_SP,
-                name: Pat::Ident(BindingIdent {
-                    // Don't HAVE to clone, but probs cheaper
-                    id: datum.name.clone().into(),
-                    type_ann: None,
-                }),
-                init: None,
-                definite: false,
-            });
-        }
         if stmts.len() == 1 {
             let only_stmt = stmts.pop()?;
             if let Stmt::Expr(inner_expr) = only_stmt {

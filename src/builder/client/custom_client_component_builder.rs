@@ -51,10 +51,9 @@ fn grab_inner_expr(raw: JSXAttrOrSpread) -> Box<Expr> {
 fn transform_inner_expression_mut<T: ParentVisitor>(
     parent_visitor: &mut T,
     to_visit: &mut Box<Expr>,
-) -> bool {
+) {
     let mut attribute_visitor = ClientJsxExprTransformer::new(parent_visitor, true, true);
     attribute_visitor.visit_and_wrap_outer_expr(to_visit);
-    attribute_visitor.needs_revisit
 }
 
 fn build_ref_expr(stmts: Vec<Stmt>) -> Prop {
@@ -163,12 +162,7 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
         for (maybe_key, wrapped_expression) in self.metadata.props.drain(..) {
             self.needs_merge_props = self.needs_merge_props || maybe_key.is_none();
             let mut raw_expression = grab_inner_expr(wrapped_expression);
-            let mut needs_revisit =
-                transform_inner_expression_mut(self.parent_visitor, &mut raw_expression);
-            while needs_revisit {
-                needs_revisit =
-                    transform_inner_expression_mut(self.parent_visitor, &mut raw_expression);
-            }
+            transform_inner_expression_mut(self.parent_visitor, &mut raw_expression);
             if let Some(key) = maybe_key {
                 parsed_prop_slice.push((key, raw_expression));
             } else {

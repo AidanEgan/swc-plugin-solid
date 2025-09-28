@@ -8,6 +8,7 @@
 
 pub mod class_builder;
 pub mod event_handler_builder;
+pub mod helpers;
 pub mod ref_statement_builder;
 pub mod standard_prop_builder;
 pub mod style_builder;
@@ -17,8 +18,8 @@ use swc_core::{
     common::{SyntaxContext, DUMMY_SP},
     ecma::{
         ast::{
-            AssignExpr, AssignTarget, BinExpr, CallExpr, Expr, ExprOrSpread, ExprStmt, Ident,
-            JSXAttrOrSpread, JSXAttrValue, Lit, MemberExpr, SimpleAssignTarget, Stmt,
+            CallExpr, Expr, ExprStmt, JSXAttrOrSpread, JSXAttrValue, JSXExpr, Lit, ObjectLit, Prop,
+            PropName, Stmt,
         },
         visit::VisitMutWith,
     },
@@ -28,6 +29,10 @@ use crate::{
     builder::{
         client::{
             effect_builder::{EffectBuilder, EffectMetadata},
+            element_properties::helpers::{
+                generate_effect_assignment, merge_prop_as_getter, merge_prop_as_kv,
+                EffectOrInlineOrExpression, PossibleEffectStatement,
+            },
             jsx_expr_builder_client::{build_js_from_client_jsx, standard_build_res_wrappings},
             jsx_expr_transformer_client::ClientJsxExprTransformer,
             jsx_parser_client::ClientJsxElementVisitor,
@@ -36,64 +41,10 @@ use crate::{
     },
     helpers::{
         common_into_expressions::{ident_callee, ident_expr},
-        generate_var_names::{generate_use, generate_v},
+        generate_var_names::{generate_el, generate_merge_props, generate_v, SPREAD},
     },
-    transform::{
-        parent_visitor::{self, ParentVisitor},
-        scope_manager::TrackedVariable,
-    },
+    transform::{parent_visitor::ParentVisitor, scope_manager::TrackedVariable},
 };
-
-type Effect = (Ident, MemberExpr);
-pub enum PossibleEffectStatement {
-    Std(Box<Expr>),
-    Effect(Effect),
-}
-
-enum EffectOrInlineOrExpression {
-    EffectRes((Box<Expr>, Effect)),
-    InlineRes(String),
-    ExpressionRes(Box<Expr>),
-}
-
-fn generate_effect_assignment(data: &Effect) -> Box<Expr> {
-    let assign = AssignExpr {
-        span: DUMMY_SP,
-        op: swc_core::ecma::ast::AssignOp::Assign,
-        left: AssignTarget::Simple(SimpleAssignTarget::Ident(data.0.clone().into())),
-        right: data.1.clone().into(),
-    };
-    Box::new(assign.into())
-}
-
-fn generate_effect_statement(data: Effect, expr: Box<Expr>) -> Stmt {
-    let expr = BinExpr {
-        span: DUMMY_SP,
-        op: swc_core::ecma::ast::BinaryOp::LogicalAnd,
-        left: BinExpr {
-            span: DUMMY_SP,
-            op: swc_core::ecma::ast::BinaryOp::NotEqEq,
-            left: data.0.into(),
-            right: data.1.into(),
-        }
-        .into(),
-        right: expr,
-    };
-    Stmt::Expr(ExprStmt {
-        span: DUMMY_SP,
-        expr: expr.into(),
-    })
-}
-
-fn generate_use_expr(args: Vec<ExprOrSpread>) -> Box<Expr> {
-    Box::new(Expr::Call(CallExpr {
-        span: DUMMY_SP,
-        ctxt: SyntaxContext::empty(),
-        callee: ident_callee(generate_use()),
-        args,
-        type_args: None,
-    }))
-}
 
 /*
  *
@@ -201,7 +152,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                             let mut sub_visitor = ClientJsxExprTransformer::new(
                                 self.parent_visitor,
                                 transform_call_exprs,
-                                true,
+                                false, // Memo bin + cond only in custom compnents I think
                             );
                             if transform_call_exprs {
                                 sub_visitor.visit_and_wrap_outer_expr(&mut expr);
@@ -220,10 +171,6 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
         }
     }
 
-    pub fn handle_prop(name: Atom, data: JSXAttrOrSpread) {
-        todo!();
-    }
-
     pub fn build_effect_statement(&mut self) -> Option<Stmt> {
         let mut data = std::mem::take(&mut self.effect_builder.data);
         if data.is_empty() {
@@ -234,7 +181,18 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                 super::effect_builder::EffectVariant::Class => {
                     self.class_builder(raw.count, PossibleEffectStatement::Std(raw.expr));
                 }
-                super::effect_builder::EffectVariant::Style => todo!(),
+                super::effect_builder::EffectVariant::Style(key) => match key {
+                    Some(key) => {
+                        self.individual_style_builder(
+                            raw.count,
+                            key,
+                            PossibleEffectStatement::Std(raw.expr),
+                        );
+                    }
+                    None => {
+                        self.style_builder(raw.count, PossibleEffectStatement::Std(raw.expr));
+                    }
+                },
                 super::effect_builder::EffectVariant::Std => {
                     self.standard_prop_builder(
                         raw.name,
@@ -245,6 +203,8 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
             }
         } else {
             for datum in data {
+                self.effect_builder
+                    .add_var_decl(datum.name.clone(), Some(datum.expr));
                 match datum.variant {
                     super::effect_builder::EffectVariant::Class => {
                         self.class_builder(
@@ -252,7 +212,21 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                             PossibleEffectStatement::Effect((datum.v_val, datum.obj)),
                         );
                     }
-                    super::effect_builder::EffectVariant::Style => todo!(),
+                    super::effect_builder::EffectVariant::Style(key) => match key {
+                        Some(key) => {
+                            self.individual_style_builder(
+                                datum.count,
+                                key,
+                                PossibleEffectStatement::Effect((datum.v_val, datum.obj)),
+                            );
+                        }
+                        None => {
+                            self.style_builder(
+                                datum.count,
+                                PossibleEffectStatement::Effect((datum.v_val, datum.obj)),
+                            );
+                        }
+                    },
                     super::effect_builder::EffectVariant::Std => {
                         self.standard_prop_builder(
                             datum.name,
@@ -265,6 +239,90 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
         }
         self.effect_builder
             .build_effect(std::mem::take(&mut self.statements))
+    }
+
+    fn build_individual_property_statement(
+        &mut self,
+        element_count: usize,
+        name: Atom,
+        attr: JSXAttrOrSpread,
+    ) {
+        match name.as_str() {
+            "class" | "className" => {
+                let expr = self.std_transform(attr, false);
+                if self.tmp_wrap_effect {
+                    let assigned_v = self.parent_visitor.v_count();
+                    let assigned_prop = self.effect_builder.get_new_obj();
+                    self.effect_builder.data.push(EffectMetadata {
+                        expr,
+                        v_val: generate_v(*assigned_v).into(),
+                        obj: assigned_prop,
+                        variant: super::effect_builder::EffectVariant::Class,
+                        count: element_count,
+                        name: "class".into(),
+                    });
+
+                    *assigned_v += 1;
+                    return;
+                };
+                self.class_builder(element_count, PossibleEffectStatement::Std(expr));
+            }
+            "classList" => {
+                todo!("Implement class list object")
+            }
+            "style" => {
+                self.parse_all_styles(element_count, attr);
+            }
+            "ref" => {
+                let expr = self.std_transform(attr, false);
+                self.ref_builder(Some(element_count), expr);
+            }
+            prop => {
+                let expr = self.std_transform(attr, false);
+                // Event handling
+                if prop.starts_with("on") {
+                    self.event_handler_builder(prop, element_count, expr);
+                } else if prop.starts_with("style:") {
+                    let key: PropName = PropName::Str(
+                        prop.split_once(":")
+                            .expect("Wtf I just saw the ':'???")
+                            .1
+                            .into(),
+                    );
+                    if self.tmp_wrap_effect {
+                        self.style_and_effect(element_count, expr, Some(key));
+                        self.tmp_wrap_effect = false;
+                    } else {
+                        self.individual_style_builder(
+                            element_count,
+                            key,
+                            PossibleEffectStatement::Std(expr),
+                        );
+                    }
+                } else {
+                    if self.tmp_wrap_effect {
+                        let assigned_v = self.parent_visitor.v_count();
+                        let assigned_prop = self.effect_builder.get_new_obj();
+                        self.effect_builder.data.push(EffectMetadata {
+                            expr,
+                            v_val: generate_v(*assigned_v).into(),
+                            obj: assigned_prop,
+                            variant: super::effect_builder::EffectVariant::Std,
+                            count: element_count,
+                            name: prop.into(),
+                        });
+
+                        *assigned_v += 1;
+                        return;
+                    };
+                    self.standard_prop_builder(
+                        prop.into(),
+                        element_count,
+                        PossibleEffectStatement::Std(expr),
+                    );
+                }
+            }
+        }
     }
 
     // Needs to take opening metadata and parse it all out
@@ -281,84 +339,94 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
         if data.has_spread {
             let mut seen_first_spread = false;
             let mut merge_props_args: Vec<Box<Expr>> = vec![];
-            /*
-            let mut merge_props_args: Option<Vec<Box<Expr>>> = None;
             for (name, attr) in data.attrs {
-                if let Some(name) = name {
+                if let JSXAttrOrSpread::SpreadElement(spread_el) = attr {
+                    merge_props_args.push(spread_el.expr);
+                    seen_first_spread = true;
                 } else {
-                    if let Some(merge_props_args) = &mut merge_props_args {
-                        merge_props_args.push(self.std_transform(attr));
-                    } else {
-                        merge_props_args = Some(vec![self.std_transform(attr)])
-                    }
+                    if let Some(name) = name {
+                        let is_call_expr_prop = if let JSXAttrOrSpread::JSXAttr(jsx_a) = &attr {
+                            if let Some(JSXAttrValue::JSXExprContainer(ec)) = &jsx_a.value {
+                                if let JSXExpr::Expr(e) = &ec.expr {
+                                    e.is_call()
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        };
+
+                        if seen_first_spread || is_call_expr_prop {
+                            let prop: Box<Prop> = if is_call_expr_prop {
+                                merge_prop_as_getter(name, self.std_transform(attr, false))
+                            } else {
+                                merge_prop_as_kv(name, self.std_transform(attr, false))
+                            };
+                            if let Some(Some(obj)) =
+                                merge_props_args.last_mut().map(|x| x.as_mut_object())
+                            {
+                                obj.props.push(prop.into());
+                            } else {
+                                merge_props_args.push(
+                                    ObjectLit {
+                                        span: DUMMY_SP,
+                                        props: vec![prop.into()],
+                                    }
+                                    .into(),
+                                );
+                            };
+                        } else {
+                            self.build_individual_property_statement(element_count, name, attr);
+                        }
+                    };
                 }
             }
-            */
-            todo!("")
+
+            // Done here b/c vec will be consumed after
+            if merge_props_args.len() > 1 {
+                self.parent_visitor
+                    .add_import(generate_merge_props().as_str().into());
+            }
+            let merge_props_final: Box<Expr> = if merge_props_args.len() == 1 {
+                merge_props_args.pop().unwrap()
+            } else {
+                CallExpr {
+                    span: DUMMY_SP,
+                    ctxt: SyntaxContext::empty(),
+                    callee: ident_callee(generate_merge_props()),
+                    args: merge_props_args.into_iter().map(|e| e.into()).collect(),
+                    type_args: None,
+                }
+                .into()
+            };
+
+            self.statements.push(Stmt::Expr(ExprStmt {
+                span: DUMMY_SP,
+                expr: CallExpr {
+                    span: DUMMY_SP,
+                    ctxt: SyntaxContext::empty(),
+                    callee: ident_callee(SPREAD.into()),
+                    args: vec![
+                        ident_expr(generate_el(element_count)).into(),
+                        merge_props_final.into(),
+                        Expr::Lit(Lit::Bool(data.is_svg.into())).into(),
+                        Expr::Lit(Lit::Bool(data.has_children.into())).into(),
+                    ],
+                    type_args: None,
+                }
+                .into(),
+            }));
+            self.parent_visitor.add_import(SPREAD.into());
         } else {
             for (name, attr) in data.attrs {
-                match name
-                    .expect("All non-spread properties should have a name")
-                    .as_str()
-                {
-                    "class" | "className" => {
-                        let expr = self.std_transform(attr, false);
-                        if self.tmp_wrap_effect {
-                            let assigned_v = self.parent_visitor.v_count();
-                            let assigned_prop = self.effect_builder.get_new_obj();
-                            self.effect_builder.data.push(EffectMetadata {
-                                expr,
-                                v_val: generate_v(*assigned_v).into(),
-                                obj: assigned_prop,
-                                variant: super::effect_builder::EffectVariant::Class,
-                                count: element_count,
-                                name: "class".into(),
-                            });
-
-                            *assigned_v += 1;
-                            continue;
-                        };
-                        self.class_builder(element_count, PossibleEffectStatement::Std(expr));
-                    }
-                    "classList" => {
-                        todo!("Implement class list object")
-                    }
-                    "style" => {
-                        todo!("parse out individual styles")
-                    }
-                    "ref" => {
-                        let expr = self.std_transform(attr, true);
-                        self.ref_builder(Some(element_count), expr);
-                    }
-                    prop => {
-                        let expr = self.std_transform(attr, true);
-                        // Event handling
-                        if prop.starts_with("on") {
-                            self.event_handler_builder(prop, element_count, expr);
-                        } else {
-                            if self.tmp_wrap_effect {
-                                let assigned_v = self.parent_visitor.v_count();
-                                let assigned_prop = self.effect_builder.get_new_obj();
-                                self.effect_builder.data.push(EffectMetadata {
-                                    expr,
-                                    v_val: generate_v(*assigned_v).into(),
-                                    obj: assigned_prop,
-                                    variant: super::effect_builder::EffectVariant::Std,
-                                    count: element_count,
-                                    name: prop.into(),
-                                });
-
-                                *assigned_v += 1;
-                                continue;
-                            };
-                            self.standard_prop_builder(
-                                prop.into(),
-                                element_count,
-                                PossibleEffectStatement::Std(expr),
-                            );
-                        }
-                    }
-                }
+                self.build_individual_property_statement(
+                    element_count,
+                    name.expect("All non-spread properties should have a name"),
+                    attr,
+                );
                 self.tmp_wrap_effect = false;
             }
         }

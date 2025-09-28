@@ -8,7 +8,7 @@ use swc_core::{
 };
 
 use crate::{
-    builder::client::element_properties::{generate_use_expr, ElementPropertiesBuilder},
+    builder::client::element_properties::ElementPropertiesBuilder,
     helpers::{
         common_into_expressions::{ident_callee, ident_expr, ident_name},
         generate_var_names::{generate_el, generate_ref, generate_use},
@@ -50,7 +50,7 @@ pub fn create_ref_statements(
         import_use = true;
         statements.push(Stmt::Expr(ExprStmt {
             span: DUMMY_SP,
-            expr: generate_use_expr(vec![ref_expr.into()]),
+            expr: super::helpers::generate_use_expr(vec![ref_expr.into()]),
         }));
         return (None, import_use);
     }
@@ -78,7 +78,7 @@ pub fn create_ref_statements(
 
     let function_ternary_arm = if let Some(element_count) = element_count {
         import_use = true;
-        generate_use_expr(vec![
+        super::helpers::generate_use_expr(vec![
             ident_expr(generate_ref(*local_ref_count)).into(),
             ident_expr(generate_el(element_count)).into(),
         ])

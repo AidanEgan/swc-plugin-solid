@@ -20,7 +20,6 @@ use crate::{
 #[derive(Debug)]
 pub struct ClientJsxExprTransformer<'a, T: ParentVisitor> {
     parent_visitor: &'a mut T,
-    pub needs_revisit: bool,
     transform_call_exprs: bool,
     memo_bin_and_cond: bool,
     pub should_wrap_in_effect: bool,
@@ -34,7 +33,6 @@ impl<'a, T: ParentVisitor> ClientJsxExprTransformer<'a, T> {
     ) -> Self {
         Self {
             parent_visitor,
-            needs_revisit: false,
             transform_call_exprs,
             memo_bin_and_cond,
             should_wrap_in_effect: false,
@@ -47,10 +45,7 @@ impl<'a, T: ParentVisitor> ClientJsxExprTransformer<'a, T> {
             // Optimize by just calling with callee
             if call_expr.args.is_empty() && self.transform_call_exprs {
                 if let Some(expr) = call_expr.callee.as_mut_expr() {
-                    // Revist all expressions that aren't just a simple ident expr
-                    self.needs_revisit = false; //??? self.needs_revisit || !expr.is_ident();
                     *node = remove_expr_from_tree(expr);
-                    return;
                 }
             } else {
                 let tmp = std::mem::take(node);
@@ -70,7 +65,11 @@ impl<'a, T: ParentVisitor> VisitMut for ClientJsxExprTransformer<'a, T> {
     // Intentionally do nothing
     fn visit_mut_expr(&mut self, node: &mut swc_core::ecma::ast::Expr) {
         node.visit_mut_children_with(self);
-        if !self.should_wrap_in_effect && node.is_call() || node.is_arrow() || node.is_fn_expr() {
+        if !self.should_wrap_in_effect && node.is_call()
+            || node.is_arrow()
+            || node.is_fn_expr()
+            || node.is_member()
+        {
             self.should_wrap_in_effect = true;
         }
         if node.is_jsx_element() || node.is_jsx_fragment() {

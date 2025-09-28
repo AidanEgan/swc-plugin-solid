@@ -3,17 +3,15 @@ use swc_core::{
     ecma::ast::{Expr, JSXAttr, JSXAttrOrSpread, JSXAttrValue},
 };
 
-/*
-pub struct Attrs {
-    name: &str,
-}
-*/
 #[derive(Debug, Clone, Default)]
 pub struct JsxOpeningMetadata {
     // Spread elements have no 'key'
     pub attrs: Vec<(Option<Atom>, JSXAttrOrSpread)>,
     pub value: String,
     pub has_spread: bool,
+    pub is_ce: bool,
+    pub is_svg: bool,
+    pub has_children: bool,
 }
 
 impl JsxOpeningMetadata {
@@ -22,6 +20,9 @@ impl JsxOpeningMetadata {
             attrs: Vec::new(),
             value,
             has_spread: false,
+            is_ce: false,
+            is_svg: false,
+            has_children: false,
         }
     }
 }
@@ -31,15 +32,13 @@ pub struct JsxCustomComponentMetadata<T: Clone> {
     pub value: String,
     pub props: Vec<(Option<Atom>, JSXAttrOrSpread)>, // Might just have to clone expr :(
     pub children: Vec<T>,
-    pub needs_revisit: bool, // Might needs swc to re-evaluate expressions in props
-    pub is_builtin: bool,    // Users can provide list of builtin components which we need to import
+    pub is_builtin: bool, // Users can provide list of builtin components which we need to import
 }
 
 // Subset of custom component metadata
 #[derive(Debug, Clone, Default)]
 pub struct JsxFragmentMetadata<T: Clone> {
     pub children: Vec<T>,
-    pub needs_revisit: bool, // Might needs swc to re-evaluate expressions in props
 }
 
 #[derive(Debug, Clone)]

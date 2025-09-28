@@ -5,8 +5,9 @@ use swc_core::{
 
 pub fn parse_attrs(
     opening_el: &mut JSXOpeningElement,
-) -> (Vec<(Option<Atom>, JSXAttrOrSpread)>, bool) {
+) -> (Vec<(Option<Atom>, JSXAttrOrSpread)>, bool, bool) {
     let mut has_spread = false;
+    let mut has_is = false;
     let res = opening_el
         .attrs
         .drain(..)
@@ -18,7 +19,12 @@ pub fn parse_attrs(
                 }
                 JSXAttrOrSpread::JSXAttr(a) => {
                     let name = match &a.name {
-                        JSXAttrName::Ident(i) => i.sym.clone(),
+                        JSXAttrName::Ident(i) => {
+                            if i.sym.as_str() == "is" {
+                                has_is = true;
+                            }
+                            i.sym.clone()
+                        }
                         JSXAttrName::JSXNamespacedName(nn) => nn.name.sym.clone(),
                     };
                     Some(name)
@@ -27,5 +33,5 @@ pub fn parse_attrs(
             (name, attr_or_spread)
         })
         .collect();
-    (res, has_spread)
+    (res, has_spread, has_is)
 }

@@ -15,6 +15,12 @@ use swc_core::{
     ecma::visit::VisitMut,
 };
 
+#[derive(Debug, Clone, Copy)]
+pub struct TemplateMetaData {
+    pub is_ce: bool,
+    pub is_svg: bool,
+}
+
 pub struct SolidJsVisitor<C: Clone + Comments, S: SourceMapper> {
     // We may not need Arc in the plugin context - this is only to preserve isomorphic interface
     // between plugin & custom transform pass.
@@ -23,6 +29,7 @@ pub struct SolidJsVisitor<C: Clone + Comments, S: SourceMapper> {
     options: PluginArgs,
     scope_manager: ScopeManager,
     templates: HashMap<String, usize>,
+    template_data: HashMap<usize, TemplateMetaData>,
     events: BTreeSet<String>,
     // Want to guarantee order (mostly for tests)
     imports: BTreeSet<String>,
@@ -52,7 +59,7 @@ impl<C: Clone + Comments, S: SourceMapper> ParentVisitor for SolidJsVisitor<C, S
     fn get_is_hydratable(&self) -> bool {
         self.options.hydratable
     }
-    fn get_template_id(&mut self, template: &str) -> usize {
+    fn register_template(&mut self, template: &str, is_ce: bool, is_svg: bool) -> usize {
         if let Some(id) = self.templates.get(template) {
             // Template already exists
             *id
@@ -61,6 +68,8 @@ impl<C: Clone + Comments, S: SourceMapper> ParentVisitor for SolidJsVisitor<C, S
             self.template_count += 1;
             self.templates
                 .insert(template.to_string(), self.template_count);
+            self.template_data
+                .insert(self.template_count, TemplateMetaData { is_ce, is_svg });
             self.template_count
         }
     }
@@ -105,6 +114,7 @@ impl<C: Clone + Comments, S: SourceMapper> SolidJsVisitor<C, S> {
             v_count: 0,
             scope_manager: ScopeManager::new(),
             templates: HashMap::new(),
+            template_data: HashMap::new(),
             events: BTreeSet::new(),
             imports: BTreeSet::new(),
         }
@@ -136,7 +146,11 @@ impl<C: Clone + Comments, S: SourceMapper> VisitMut for SolidJsVisitor<C, S> {
             self.options.module_name.clone(),
         );
         if has_templates {
-            let decl = create_template_declarations(&mut self.templates, self.template_count);
+            let decl = create_template_declarations(
+                &mut self.templates,
+                &mut self.template_data,
+                self.template_count,
+            );
             imports_vec.push(ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(decl)))));
         }
 
@@ -197,11 +211,8 @@ impl<C: Clone + Comments, S: SourceMapper> VisitMut for SolidJsVisitor<C, S> {
     // Core visitor to find + transform JSX Expressions
     fn visit_mut_expr(&mut self, node: &mut swc_core::ecma::ast::Expr) {
         match create_new_expr_mut(node, self) {
-            Ok((new_expr, needs_more_traverse)) => {
+            Ok(new_expr) => {
                 *node = *new_expr;
-                if needs_more_traverse {
-                    node.visit_mut_children_with(self);
-                }
             }
             Err(CreateNewExprError::NoChangeNeeded) => {
                 // Any potential JSX in a block statement will be encapsulated
