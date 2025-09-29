@@ -7,6 +7,7 @@
  */
 
 pub mod class_builder;
+mod class_list_builder;
 pub mod event_handler_builder;
 pub mod helpers;
 pub mod ref_statement_builder;
@@ -181,6 +182,18 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                 super::effect_builder::EffectVariant::Class => {
                     self.class_builder(raw.count, PossibleEffectStatement::Std(raw.expr));
                 }
+                super::effect_builder::EffectVariant::ClassList(is_toggle) => {
+                    self.class_list_builder(
+                        raw.count,
+                        if is_toggle {
+                            Some(raw.name.as_str())
+                        } else {
+                            None
+                        },
+                        PossibleEffectStatement::Std(raw.expr),
+                        true,
+                    );
+                }
                 super::effect_builder::EffectVariant::Style(key) => match key {
                     Some(key) => {
                         self.individual_style_builder(
@@ -210,6 +223,18 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                         self.class_builder(
                             datum.count,
                             PossibleEffectStatement::Effect((datum.v_val, datum.obj)),
+                        );
+                    }
+                    super::effect_builder::EffectVariant::ClassList(is_toggle) => {
+                        self.class_list_builder(
+                            datum.count,
+                            if is_toggle {
+                                Some(datum.name.as_str())
+                            } else {
+                                None
+                            },
+                            PossibleEffectStatement::Effect((datum.v_val, datum.obj)),
+                            true,
                         );
                     }
                     super::effect_builder::EffectVariant::Style(key) => match key {
@@ -268,7 +293,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                 self.class_builder(element_count, PossibleEffectStatement::Std(expr));
             }
             "classList" => {
-                todo!("Implement class list object")
+                self.class_list_delegator(element_count, attr);
             }
             "style" => {
                 self.parse_all_styles(element_count, attr);

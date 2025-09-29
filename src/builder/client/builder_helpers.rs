@@ -7,7 +7,9 @@ use swc_core::{
     },
 };
 
-use crate::helpers::generate_var_names::generate_memo;
+use crate::helpers::{
+    common_into_expressions::create_double_negated, generate_var_names::generate_memo,
+};
 
 pub fn own_box_expr(old_expr: &mut Box<Expr>) -> Box<Expr> {
     let mut dummy = Box::new(Expr::dummy());
@@ -87,16 +89,8 @@ pub fn wrap_with_memo(expr: Box<Expr>) -> CallExpr {
 }
 
 pub fn memoize_bin_cond_expr(ex: Box<Expr>) -> Box<Expr> {
-    let double_negated = UnaryExpr {
-        span: DUMMY_SP,
-        op: UnaryOp::Bang,
-        arg: Box::new(Expr::Unary(UnaryExpr {
-            span: DUMMY_SP,
-            op: UnaryOp::Bang,
-            arg: ex,
-        })),
-    };
-    let arrowfn = wrap_in_empty_arrow(BlockStmtOrExpr::Expr(double_negated.into()).into());
+    let double_negated = create_double_negated(ex);
+    let arrowfn = wrap_in_empty_arrow(BlockStmtOrExpr::Expr(double_negated).into());
     let memo = wrap_with_memo(Box::new(arrowfn.into()));
     Box::new(Expr::Call(CallExpr {
         span: DUMMY_SP,

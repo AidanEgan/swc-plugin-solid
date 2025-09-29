@@ -1,6 +1,7 @@
 use swc_core::ecma::{
-    ast::{Expr, JSXElementName},
+    ast::{BigInt, BigIntValue, Expr, JSXElementName, Lit},
     transforms::base::ext::ExprRefExt,
+    utils::ExprExt,
 };
 
 use crate::transform::parent_visitor::ParentVisitor;
@@ -52,4 +53,25 @@ pub fn is_undefined(expr: &Box<Expr>) -> bool {
     } else {
         false
     }
+}
+
+pub fn is_falsy_lit(lit: &Lit) -> bool {
+    match lit {
+        Lit::Bool(b) => b.value == false,
+        Lit::Str(s) => s.value.as_str() == "",
+        Lit::Null(_) => true,
+        Lit::Num(number) => number.value == 0_f64,
+        Lit::BigInt(big_int) => *big_int.value == BigIntValue::ZERO,
+        Lit::Regex(_) => false,
+        Lit::JSXText(jsxtext) => jsxtext.value.as_str() == "",
+    }
+}
+
+pub fn is_falsy(expr: &Box<Expr>) -> bool {
+    return if let Some(lit) = expr.as_lit() {
+        is_falsy_lit(lit)
+    } else {
+        false
+    } || is_undefined(expr)
+        || expr.is_nan();
 }

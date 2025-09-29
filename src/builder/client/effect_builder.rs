@@ -19,7 +19,8 @@ use crate::{
 #[derive(Debug)]
 pub enum EffectVariant {
     Class,
-    Style(Option<PropName>),
+    ClassList(bool), // Determines if _$className or el.classname.toggle is used
+    Style(Option<PropName>), // Determines which style js fn to use
     Std,
 }
 
@@ -39,6 +40,7 @@ pub struct EffectBuilder {
     vars: VarDecl,
     pub data: Vec<EffectMetadata>,
     obj_props: Vec<Atom>,
+    uses_arg: bool,
 }
 
 impl EffectBuilder {
@@ -54,6 +56,7 @@ impl EffectBuilder {
             },
             data: vec![],
             obj_props: vec![],
+            uses_arg: false,
         }
     }
 
@@ -82,6 +85,10 @@ impl EffectBuilder {
             obj: ident_expr(effect_arg),
             prop: MemberProp::Ident(self.get_new_obj_prop().into()),
         }
+    }
+
+    pub fn set_uses_arg(&mut self, uses: bool) {
+        self.uses_arg = uses;
     }
 
     pub fn add_data(
@@ -122,8 +129,16 @@ impl EffectBuilder {
         if stmts.len() == 1 {
             let only_stmt = stmts.pop()?;
             if let Stmt::Expr(inner_expr) = only_stmt {
-                let box_e: Box<Expr> =
-                    wrap_in_empty_arrow(BlockStmtOrExpr::Expr(inner_expr.expr).into()).into();
+                let box_e: Box<Expr> = if !self.uses_arg {
+                    wrap_in_empty_arrow(BlockStmtOrExpr::Expr(inner_expr.expr).into()).into()
+                } else {
+                    wrap_in_arrow(
+                        BlockStmtOrExpr::Expr(inner_expr.expr).into(),
+                        vec![Pat::Ident(generate_effect_arg().into())],
+                    )
+                    .into()
+                };
+
                 let e = CallExpr {
                     span: DUMMY_SP,
                     ctxt: SyntaxContext::empty(),

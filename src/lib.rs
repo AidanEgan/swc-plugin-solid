@@ -170,4 +170,9 @@ mod tests {
     fn style_test() {
         std_format_test("basic", "style.jsx");
     }
+
+    #[test]
+    fn class_list_test() {
+        std_format_test("components", "class_list_test.tsx");
+    }
 }

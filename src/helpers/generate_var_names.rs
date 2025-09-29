@@ -26,6 +26,7 @@ pub const DELEGATE_EVENTS: &str = "_$delegateEvents";
 pub const STYLE: &str = "_$style";
 pub const SET_STYLE_PROPERTY: &str = "_$setStyleProperty";
 pub const SPREAD: &str = "_$spread";
+pub const CLASS_LIST: &str = "_$classList";
 
 pub fn generate_template_name(id: usize) -> Atom {
     format!("{0}{1}", TMPL, id).into()

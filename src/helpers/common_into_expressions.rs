@@ -1,7 +1,10 @@
 use swc_core::{
     atoms::Atom,
     common::{source_map::PURE_SP, SyntaxContext, DUMMY_SP},
-    ecma::ast::{Callee, Decl, Expr, Ident, Lit, Stmt, VarDecl, VarDeclKind, VarDeclarator},
+    ecma::ast::{
+        Callee, Decl, Expr, Ident, Lit, Stmt, UnaryExpr, UnaryOp, VarDecl, VarDeclKind,
+        VarDeclarator,
+    },
 };
 
 pub fn ident_name(name: Atom, is_pure: bool) -> Ident {
@@ -33,4 +36,18 @@ pub fn create_var_statement(decls: Vec<VarDeclarator>) -> Stmt {
 
 pub fn create_lit_str_expr(val: &str) -> Box<Expr> {
     Expr::Lit(Lit::Str(val.into())).into()
+}
+
+pub fn create_double_negated(expr: Box<Expr>) -> Box<Expr> {
+    UnaryExpr {
+        span: DUMMY_SP,
+        op: UnaryOp::Bang,
+        arg: UnaryExpr {
+            span: DUMMY_SP,
+            op: UnaryOp::Bang,
+            arg: expr,
+        }
+        .into(),
+    }
+    .into()
 }
