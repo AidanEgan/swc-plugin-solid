@@ -46,3 +46,14 @@ function Counter6() {
     </button>
   );
 }
+
+function Counter7() {
+  const [count, setCount] = createSignal(1);
+  const increment = () => setCount(count => count + 1);
+
+  return (
+    <button class={/*@once*/getClass()}>
+      {count()}
+    </button>
+  );
+}

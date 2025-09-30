@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 
 use swc_core::atoms::Atom;
+use swc_core::common::BytePos;
 
 use crate::builder::jsx_builder::ParsedJsxData;
 use crate::transform::scope_manager::TrackedVariable;
@@ -20,4 +21,5 @@ pub trait ParentVisitor {
     fn add_import(&mut self, import_name: Cow<str>);
     fn get_var_if_in_scope(&self, var: &Atom) -> Option<&TrackedVariable>;
     fn add_event(&mut self, event_name: Cow<str>);
+    fn has_static_marker(&self, span_lo: BytePos) -> bool;
 }

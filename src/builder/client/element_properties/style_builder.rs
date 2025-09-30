@@ -2,7 +2,7 @@ use std::os::unix::raw;
 
 use swc_core::{
     atoms::Atom,
-    common::{SyntaxContext, DUMMY_SP},
+    common::{Spanned, SyntaxContext, DUMMY_SP},
     ecma::{
         ast::{
             CallExpr, Expr, ExprOrSpread, ExprStmt, JSXAttrOrSpread, JSXAttrValue, JSXExpr,
@@ -145,7 +145,6 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
     }
 
     pub fn parse_all_styles(&mut self, element_count: usize, mut raw_data: JSXAttrOrSpread) {
-        let mut is_spread = false;
         match &mut raw_data {
             JSXAttrOrSpread::JSXAttr(jsxattr) => {
                 match &mut jsxattr.value {
@@ -157,12 +156,21 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                                     .iter()
                                     .any(|i| matches!(i, PropOrSpread::Spread(_)))
                                 {
-                                    // Effect wrap whole thing if has spread
-                                    self.style_and_effect(
-                                        element_count,
-                                        Expr::Object(obj_expr).into(),
-                                        None,
-                                    );
+                                    if !self.parent_visitor.has_static_marker(ec.span_lo()) {
+                                        // Effect wrap whole thing if has spread
+                                        self.style_and_effect(
+                                            element_count,
+                                            Expr::Object(obj_expr).into(),
+                                            None,
+                                        );
+                                    } else {
+                                        self.style_builder(
+                                            element_count,
+                                            PossibleEffectStatement::Std(
+                                                Expr::Object(obj_expr).into(),
+                                            ),
+                                        );
+                                    }
                                     return;
                                 } else {
                                     let mut style_obj_builder = ObjectLit::default();
@@ -244,12 +252,10 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                 }
             }
             /* Spread */
-            _ => {
-                is_spread = true;
-            }
+            _ => { /* std trans */ }
         }
         let transformed = self.std_transform(raw_data, false);
-        if is_spread || self.tmp_wrap_effect {
+        if self.tmp_wrap_effect {
             self.style_and_effect(element_count, transformed, None);
         } else {
             self.style_builder(element_count, PossibleEffectStatement::Std(transformed));

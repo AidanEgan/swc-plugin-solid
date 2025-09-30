@@ -16,7 +16,7 @@ pub mod style_builder;
 
 use swc_core::{
     atoms::Atom,
-    common::{SyntaxContext, DUMMY_SP},
+    common::{Spanned, SyntaxContext, DUMMY_SP},
     ecma::{
         ast::{
             CallExpr, Expr, ExprStmt, JSXAttrOrSpread, JSXAttrValue, JSXExpr, Lit, ObjectLit, Prop,
@@ -146,6 +146,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                     ))
                 }
                 Some(JSXAttrValue::JSXExprContainer(exp)) => {
+                    let has_static_marker = self.parent_visitor.has_static_marker(exp.span_lo());
                     match exp.expr {
                         // Undefined behavior seemingly
                         swc_core::ecma::ast::JSXExpr::JSXEmptyExpr(_) => Box::new(Expr::default()),
@@ -160,7 +161,8 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                             } else {
                                 expr.visit_mut_with(&mut sub_visitor);
                             }
-                            self.tmp_wrap_effect = sub_visitor.should_wrap_in_effect;
+                            self.tmp_wrap_effect =
+                                !has_static_marker && sub_visitor.should_wrap_in_effect;
                             expr
                         }
                     }

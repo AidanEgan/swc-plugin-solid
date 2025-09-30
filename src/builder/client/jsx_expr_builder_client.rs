@@ -168,7 +168,6 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
 
     // Build template string -> attach to parent visitor
     for part in parsed_data.template {
-        println!("{:?}", part);
         let count = *(parent_visitor.element_count());
         match part {
             JsxTemplateKind::Opening(open) => {

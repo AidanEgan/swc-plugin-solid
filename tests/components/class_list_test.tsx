@@ -65,4 +65,18 @@ function Counter5() {
   );
 }
 
+function Counter6() {
+  const [count, setCount] = createSignal(1);
+  const increment = () => setCount(count => count + 1);
+  const props = {
+    key: value()
+  };
+
+  return (
+    <button type="button" classList={  /*@once*/  { padding: props.padding }}>
+      {count()}
+    </button>
+  );
+}
+
 render(() => <Counter />, document.getElementById("app")!);

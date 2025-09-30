@@ -34,4 +34,26 @@ function Counter3() {
   );
 }
 
+function Counter5() {
+  const [count, setCount] = createSignal(1);
+  const increment = () => setCount(count => count + 1);
+
+  return (
+    <button style={{ border: "1px solid red", ...vals }}>
+      {count()}
+    </button>
+  );
+}
+
+function Counter4() {
+  const [count, setCount] = createSignal(1);
+  const increment = () => setCount(count => count + 1);
+
+  return (
+    <button style={/*@once*/{ border: "1px solid red", ...vals }}>
+      {count()}
+    </button>
+  );
+}
+
 render(() => <Counter />, document.getElementById("app"));

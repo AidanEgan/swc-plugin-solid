@@ -61,7 +61,7 @@ mod tests {
             omit_last_closing_tag: false,
             omit_quotes: false,
             context_to_custom_elements: false,
-            static_marker: "__@once__".into(),
+            static_marker: "@once".into(),
             effect_wrapper: "effect".into(),
             memo_wrapper: "memo".into(),
             validate: false,

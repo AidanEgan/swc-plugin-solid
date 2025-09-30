@@ -1,6 +1,6 @@
 use swc_core::{
     atoms::Atom,
-    common::{SyntaxContext, DUMMY_SP},
+    common::{Span, Spanned, SyntaxContext, DUMMY_SP},
     ecma::{
         ast::{
             CallExpr, Callee, Expr, ExprOrSpread, ExprStmt, IdentName, JSXAttr, JSXAttrOrSpread,
@@ -97,20 +97,20 @@ fn needs_class_list(props: &Vec<PropOrSpread>) -> bool {
     })
 }
 
-fn attr_is_obj(attr: &JSXAttrOrSpread) -> bool {
+fn attr_is_obj(attr: &JSXAttrOrSpread) -> (bool, Option<Span>) {
     match attr {
         JSXAttrOrSpread::JSXAttr(a) => {
             if let Some(JSXAttrValue::JSXExprContainer(ec)) = &a.value {
                 if let JSXExpr::Expr(e) = &ec.expr {
                     if e.is_object() {
-                        return true;
+                        return (true, Some(ec.span));
                     }
                 }
             }
         }
         _ => {}
     }
-    false
+    (false, None)
 }
 fn attr_get_obj(attr: JSXAttrOrSpread) -> Option<ObjectLit> {
     match attr {
@@ -176,12 +176,17 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
         }
     }
 
-    fn class_list_parser(&mut self, element_count: usize, mut obj_expr: ObjectLit) {
+    fn class_list_parser(
+        &mut self,
+        element_count: usize,
+        mut obj_expr: ObjectLit,
+        should_effect: bool,
+    ) {
         if needs_class_list(&obj_expr.props) {
             let mut little_visitor =
                 ClientJsxExprTransformer::new(self.parent_visitor, false, false);
             obj_expr.visit_mut_with(&mut little_visitor);
-            if little_visitor.should_wrap_in_effect {
+            if should_effect && little_visitor.should_wrap_in_effect {
                 let v_cnt = *self.parent_visitor.v_count();
                 self.effect_builder.add_data(
                     Box::new(Expr::Object(obj_expr)),
@@ -213,7 +218,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                 let mut little_visitor =
                     ClientJsxExprTransformer::new(self.parent_visitor, false, false);
                 val.visit_mut_with(&mut little_visitor);
-                if little_visitor.should_wrap_in_effect {
+                if should_effect && little_visitor.should_wrap_in_effect {
                     let v_cnt = *self.parent_visitor.v_count();
                     self.effect_builder.add_data(
                         val,
@@ -248,14 +253,21 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
     }
 
     pub fn class_list_delegator(&mut self, element_count: usize, attr: JSXAttrOrSpread) {
-        if attr_is_obj(&attr) {
+        let (attr_is_obj, span_data) = attr_is_obj(&attr);
+
+        let should_effect = if let Some(span_data) = span_data {
+            !self.parent_visitor.has_static_marker(span_data.span_lo())
+        } else {
+            true
+        };
+        if attr_is_obj {
             // Should always works
             if let Some(obj) = attr_get_obj(attr) {
-                self.class_list_parser(element_count, obj);
+                self.class_list_parser(element_count, obj, should_effect);
             }
         } else {
             let transformed = self.std_transform(attr, false);
-            if self.tmp_wrap_effect || transformed.is_ident() {
+            if self.tmp_wrap_effect || (should_effect && transformed.is_ident()) {
                 let v_cnt = *self.parent_visitor.v_count();
                 self.effect_builder.add_data(
                     transformed,

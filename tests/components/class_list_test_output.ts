@@ -69,4 +69,17 @@ function Counter5() {
         return _el$4;
     })();
 }
+function Counter6() {
+    const [count, setCount] = createSignal(1);
+    const increment = ()=>setCount((count)=>count + 1);
+    const props = {
+        key: value()
+    };
+    return (()=>{
+        var _el$5 = _tmpl$1();
+        _el$5.classList.toggle("padding", !!props.padding);
+        _$insert(_el$5, count);
+        return _el$5;
+    })();
+}
 render(()=>_$createComponent(Counter, {}), document.getElementById("app")!);

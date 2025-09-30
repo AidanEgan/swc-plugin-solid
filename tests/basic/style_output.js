@@ -5,7 +5,7 @@ import { effect as _$effect } from "solid-js/web";
 import { insert as _$insert } from "solid-js/web";
 import { setStyleProperty as _$setStyleProperty } from "solid-js/web";
 import { style as _$style } from "solid-js/web";
-var _tmpl$1 = /*#__PURE__*/ _$template("<button type=button>");
+var _tmpl$1 = /*#__PURE__*/ _$template("<button type=button>"), _tmpl$2 = /*#__PURE__*/ _$template("<button>");
 import { render } from "solid-js/web";
 import { createSignal } from "solid-js";
 function Counter() {
@@ -43,6 +43,32 @@ function Counter3() {
         _$insert(_el$2, count);
         _$effect(()=>_$setStyleProperty(_el$2, "border", props.border));
         return _el$2;
+    })();
+}
+function Counter5() {
+    const [count, setCount] = createSignal(1);
+    const increment = ()=>setCount((count)=>count + 1);
+    return (()=>{
+        var _el$3 = _tmpl$2();
+        _$insert(_el$3, count);
+        _$effect(()=>_$style(_el$3, {
+                border: "1px solid red",
+                ...vals
+            }));
+        return _el$3;
+    })();
+}
+function Counter4() {
+    const [count, setCount] = createSignal(1);
+    const increment = ()=>setCount((count)=>count + 1);
+    return (()=>{
+        var _el$4 = _tmpl$2();
+        _$style(_el$4, {
+            border: "1px solid red",
+            ...vals
+        });
+        _$insert(_el$4, count);
+        return _el$4;
     })();
 }
 render(()=>_$createComponent(Counter, {}), document.getElementById("app"));

@@ -7,7 +7,9 @@ use crate::transform::scope_manager::{ScopeManager, TrackedVariable};
 use crate::{config::PluginArgs, helpers::should_skip::should_skip};
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
-use swc_core::common::Spanned;
+use swc_core::common::comments::Comment;
+use swc_core::common::source_map::SmallPos;
+use swc_core::common::{BytePos, Spanned};
 use swc_core::ecma::ast::{BlockStmt, Decl, FnDecl, Function, ModuleItem, Program, Stmt, VarDecl};
 use swc_core::ecma::visit::VisitMutWith;
 use swc_core::{
@@ -99,6 +101,18 @@ impl<C: Clone + Comments, S: SourceMapper> ParentVisitor for SolidJsVisitor<C, S
     }
     fn get_var_if_in_scope(&self, var: &swc_core::atoms::Atom) -> Option<&TrackedVariable> {
         self.scope_manager.try_get_var(var)
+    }
+    fn has_static_marker(&self, span_lo: swc_core::common::BytePos) -> bool {
+        // Genuinely at a loss for words. No idea why this has to be done
+        let span_lo = BytePos(span_lo.0 + 1);
+
+        if let Some(comments) = self.comments.get_trailing(span_lo) {
+            if let Some(c) = comments.last() {
+                // Do not effect if @once preceeds expr
+                return c.text.as_str() == self.options.static_marker.as_str();
+            }
+        }
+        false
     }
 }
 
