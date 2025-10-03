@@ -11,7 +11,7 @@ use swc_core::{
     },
 };
 
-use crate::helpers::{common_into_expressions::ident_callee, generate_var_names::generate_use};
+use crate::helpers::{common_into_expressions::ident_callee, generate_var_names::USE};
 
 pub fn key_to_atom(key: PropName) -> Option<Atom> {
     match key {
@@ -74,7 +74,7 @@ pub fn generate_use_expr(args: Vec<ExprOrSpread>) -> Box<Expr> {
     Box::new(Expr::Call(CallExpr {
         span: DUMMY_SP,
         ctxt: SyntaxContext::empty(),
-        callee: ident_callee(generate_use()),
+        callee: ident_callee(USE.into()),
         args,
         type_args: None,
     }))

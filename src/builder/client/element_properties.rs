@@ -11,6 +11,7 @@ mod class_list_builder;
 pub mod event_handler_builder;
 pub mod helpers;
 pub mod ref_statement_builder;
+pub mod require_prop_builder;
 pub mod standard_prop_builder;
 pub mod style_builder;
 
@@ -19,8 +20,8 @@ use swc_core::{
     common::{Spanned, SyntaxContext, DUMMY_SP},
     ecma::{
         ast::{
-            CallExpr, Expr, ExprStmt, JSXAttrOrSpread, JSXAttrValue, JSXExpr, Lit, ObjectLit, Prop,
-            PropName, Stmt,
+            BlockStmtOrExpr, CallExpr, Expr, ExprStmt, JSXAttrOrSpread, JSXAttrValue, JSXExpr, Lit,
+            ObjectLit, Prop, PropName, Stmt,
         },
         visit::VisitMutWith,
     },
@@ -29,6 +30,7 @@ use swc_core::{
 use crate::{
     builder::{
         client::{
+            builder_helpers::wrap_in_empty_arrow,
             effect_builder::{EffectBuilder, EffectMetadata},
             element_properties::helpers::{
                 generate_effect_assignment, merge_prop_as_getter, merge_prop_as_kv,
@@ -42,10 +44,25 @@ use crate::{
     },
     helpers::{
         common_into_expressions::{ident_callee, ident_expr},
-        generate_var_names::{generate_el, generate_merge_props, generate_v, SPREAD},
+        generate_var_names::{generate_el, generate_merge_props, generate_v, SPREAD, USE},
     },
     transform::{parent_visitor::ParentVisitor, scope_manager::TrackedVariable},
 };
+
+struct WrapEffect {
+    data: Option<(Atom, Box<Expr>)>,
+}
+
+impl WrapEffect {
+    fn from(data: Option<(Atom, Box<Expr>)>) -> Self {
+        Self { data }
+    }
+    fn or_else<T: FnOnce(Atom, Box<Expr>)>(self, callback: T) {
+        if let Some(data) = self.data {
+            callback(data.0, data.1);
+        }
+    }
+}
 
 /*
  *
@@ -184,6 +201,13 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                 super::effect_builder::EffectVariant::Class => {
                     self.class_builder(raw.count, PossibleEffectStatement::Std(raw.expr));
                 }
+                super::effect_builder::EffectVariant::Prop => {
+                    self.require_prop_builder(
+                        raw.name,
+                        raw.count,
+                        PossibleEffectStatement::Std(raw.expr),
+                    );
+                }
                 super::effect_builder::EffectVariant::ClassList(is_toggle) => {
                     self.class_list_builder(
                         raw.count,
@@ -208,10 +232,11 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                         self.style_builder(raw.count, PossibleEffectStatement::Std(raw.expr));
                     }
                 },
-                super::effect_builder::EffectVariant::Std => {
+                super::effect_builder::EffectVariant::Std(is_bool) => {
                     self.standard_prop_builder(
                         raw.name,
                         raw.count,
+                        is_bool,
                         PossibleEffectStatement::Std(raw.expr),
                     );
                 }
@@ -223,6 +248,13 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                 match datum.variant {
                     super::effect_builder::EffectVariant::Class => {
                         self.class_builder(
+                            datum.count,
+                            PossibleEffectStatement::Effect((datum.v_val, datum.obj)),
+                        );
+                    }
+                    super::effect_builder::EffectVariant::Prop => {
+                        self.require_prop_builder(
+                            datum.name,
                             datum.count,
                             PossibleEffectStatement::Effect((datum.v_val, datum.obj)),
                         );
@@ -254,10 +286,11 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                             );
                         }
                     },
-                    super::effect_builder::EffectVariant::Std => {
+                    super::effect_builder::EffectVariant::Std(is_bool) => {
                         self.standard_prop_builder(
                             datum.name,
                             datum.count,
+                            is_bool,
                             PossibleEffectStatement::Effect((datum.v_val, datum.obj)),
                         );
                     }
@@ -266,6 +299,33 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
         }
         self.effect_builder
             .build_effect(std::mem::take(&mut self.statements))
+    }
+
+    fn wrap_effect(
+        &mut self,
+        expr: Box<Expr>,
+        element_count: usize,
+        variant: super::effect_builder::EffectVariant,
+        name: Atom,
+    ) -> WrapEffect {
+        if self.tmp_wrap_effect {
+            let assigned_v = self.parent_visitor.v_count();
+            let assigned_prop = self.effect_builder.get_new_obj();
+            self.effect_builder.data.push(EffectMetadata {
+                expr,
+                variant,
+                name,
+                v_val: generate_v(*assigned_v).into(),
+                obj: assigned_prop,
+                count: element_count,
+            });
+
+            *assigned_v += 1;
+            self.tmp_wrap_effect = false;
+            WrapEffect::from(None)
+        } else {
+            WrapEffect::from(Some((name, expr)))
+        }
     }
 
     fn build_individual_property_statement(
@@ -277,22 +337,15 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
         match name.as_str() {
             "class" | "className" => {
                 let expr = self.std_transform(attr, false);
-                if self.tmp_wrap_effect {
-                    let assigned_v = self.parent_visitor.v_count();
-                    let assigned_prop = self.effect_builder.get_new_obj();
-                    self.effect_builder.data.push(EffectMetadata {
-                        expr,
-                        v_val: generate_v(*assigned_v).into(),
-                        obj: assigned_prop,
-                        variant: super::effect_builder::EffectVariant::Class,
-                        count: element_count,
-                        name: "class".into(),
-                    });
-
-                    *assigned_v += 1;
-                    return;
-                };
-                self.class_builder(element_count, PossibleEffectStatement::Std(expr));
+                self.wrap_effect(
+                    expr,
+                    element_count,
+                    super::effect_builder::EffectVariant::Class,
+                    "class".into(),
+                )
+                .or_else(|_, expr| {
+                    self.class_builder(element_count, PossibleEffectStatement::Std(expr))
+                });
             }
             "classList" => {
                 self.class_list_delegator(element_count, attr);
@@ -304,49 +357,103 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                 let expr = self.std_transform(attr, false);
                 self.ref_builder(Some(element_count), expr);
             }
+            "textContent" | "innerHTML" => {
+                let expr = self.std_transform(attr, false);
+                self.wrap_effect(
+                    expr,
+                    element_count,
+                    super::effect_builder::EffectVariant::Prop,
+                    name,
+                )
+                .or_else(|name, expr| {
+                    self.require_prop_builder(
+                        name,
+                        element_count,
+                        PossibleEffectStatement::Std(expr),
+                    );
+                });
+            }
+            prop if prop.starts_with("on") => {
+                let expr = self.std_transform(attr, false);
+                self.event_handler_builder(prop, element_count, expr);
+            }
             prop => {
                 let expr = self.std_transform(attr, false);
                 // Event handling
-                if prop.starts_with("on") {
-                    self.event_handler_builder(prop, element_count, expr);
-                } else if prop.starts_with("style:") {
-                    let key: PropName = PropName::Str(
-                        prop.split_once(":")
-                            .expect("Wtf I just saw the ':'???")
-                            .1
-                            .into(),
-                    );
+                if let Some(suffix) = prop
+                    .strip_prefix("style:")
+                    .map(|key| PropName::Str(key.into()))
+                {
                     if self.tmp_wrap_effect {
-                        self.style_and_effect(element_count, expr, Some(key));
+                        self.style_and_effect(element_count, expr, Some(suffix));
                         self.tmp_wrap_effect = false;
                     } else {
                         self.individual_style_builder(
                             element_count,
-                            key,
+                            suffix,
                             PossibleEffectStatement::Std(expr),
                         );
                     }
-                } else {
-                    if self.tmp_wrap_effect {
-                        let assigned_v = self.parent_visitor.v_count();
-                        let assigned_prop = self.effect_builder.get_new_obj();
-                        self.effect_builder.data.push(EffectMetadata {
-                            expr,
-                            v_val: generate_v(*assigned_v).into(),
-                            obj: assigned_prop,
-                            variant: super::effect_builder::EffectVariant::Std,
-                            count: element_count,
-                            name: prop.into(),
-                        });
-
-                        *assigned_v += 1;
-                        return;
+                } else if let Some(suffix) = prop.strip_prefix("use:") {
+                    self.parent_visitor.add_import(USE.into());
+                    let use_expr = CallExpr {
+                        span: DUMMY_SP,
+                        ctxt: SyntaxContext::empty(),
+                        callee: ident_callee(USE.into()),
+                        type_args: None,
+                        args: vec![
+                            ident_expr(suffix.into()).into(),
+                            ident_expr(generate_el(element_count)).into(),
+                            Expr::from(wrap_in_empty_arrow(BlockStmtOrExpr::Expr(expr).into()))
+                                .into(),
+                        ],
                     };
-                    self.standard_prop_builder(
-                        prop.into(),
+                    self.statements.push(Stmt::Expr(ExprStmt {
+                        span: DUMMY_SP,
+                        expr: use_expr.into(),
+                    }));
+                } else if let Some(suffix) = prop.strip_prefix("prop:") {
+                    let suffix: Atom = suffix.into();
+                    self.wrap_effect(
+                        expr,
                         element_count,
-                        PossibleEffectStatement::Std(expr),
-                    );
+                        super::effect_builder::EffectVariant::Prop,
+                        suffix,
+                    )
+                    .or_else(|suffix, expr| {
+                        self.require_prop_builder(
+                            suffix,
+                            element_count,
+                            PossibleEffectStatement::Std(expr),
+                        );
+                    });
+                } else {
+                    let mut is_bool = false;
+                    // 'attr:' means specify this is an attribute. B/c of the
+                    // logic we don't have to check for it, but it needs to be stripped
+                    let name: Atom = prop
+                        .strip_prefix("attr:")
+                        .or_else(|| {
+                            let split_bool = prop.strip_prefix("bool:");
+                            is_bool = split_bool.is_some();
+                            split_bool
+                        })
+                        .unwrap_or(prop.into())
+                        .into();
+                    self.wrap_effect(
+                        expr,
+                        element_count,
+                        super::effect_builder::EffectVariant::Std(is_bool),
+                        name,
+                    )
+                    .or_else(|name, expr| {
+                        self.standard_prop_builder(
+                            name,
+                            element_count,
+                            is_bool,
+                            PossibleEffectStatement::Std(expr),
+                        );
+                    });
                 }
             }
         }

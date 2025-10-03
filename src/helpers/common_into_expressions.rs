@@ -2,8 +2,8 @@ use swc_core::{
     atoms::Atom,
     common::{source_map::PURE_SP, SyntaxContext, DUMMY_SP},
     ecma::ast::{
-        Callee, Decl, Expr, Ident, Lit, Stmt, UnaryExpr, UnaryOp, VarDecl, VarDeclKind,
-        VarDeclarator,
+        Callee, Decl, Expr, Ident, IdentName, Lit, MemberExpr, MemberProp, Stmt, UnaryExpr,
+        UnaryOp, VarDecl, VarDeclKind, VarDeclarator,
     },
 };
 
@@ -17,7 +17,15 @@ pub fn ident_name(name: Atom, is_pure: bool) -> Ident {
 }
 
 pub fn ident_expr(name: Atom) -> Box<Expr> {
-    Box::new(Expr::Ident(ident_name(name, false)))
+    // Will break
+    let ex: Expr = if name.contains("-") {
+        // String-ify
+        name.into()
+    } else {
+        // As ident
+        ident_name(name, false).into()
+    };
+    ex.into()
 }
 
 pub fn ident_callee(name: Atom) -> Callee {
@@ -50,4 +58,15 @@ pub fn create_double_negated(expr: Box<Expr>) -> Box<Expr> {
         .into(),
     }
     .into()
+}
+
+pub fn simple_member_expression(obj_name: Atom, prop_name: Atom) -> MemberExpr {
+    MemberExpr {
+        span: DUMMY_SP,
+        obj: ident_expr(obj_name),
+        prop: MemberProp::Ident(IdentName {
+            span: DUMMY_SP,
+            sym: prop_name,
+        }),
+    }
 }

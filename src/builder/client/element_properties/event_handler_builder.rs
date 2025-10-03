@@ -1,12 +1,8 @@
 use swc_core::{
-    atoms::Atom,
     common::{SyntaxContext, DUMMY_SP},
-    ecma::{
-        ast::{
-            AssignExpr, AssignTarget, CallExpr, Callee, Expr, ExprOrSpread, ExprStmt, IdentName,
-            Lit, MemberExpr, MemberProp, SimpleAssignTarget, Stmt,
-        },
-        utils::ExprExt,
+    ecma::ast::{
+        AssignExpr, AssignTarget, CallExpr, Callee, Expr, ExprOrSpread, ExprStmt, Lit,
+        SimpleAssignTarget, Stmt,
     },
 };
 
@@ -14,7 +10,9 @@ use crate::{
     builder::client::element_properties::ElementPropertiesBuilder,
     constants::events::is_delegated_event,
     helpers::{
-        common_into_expressions::{create_lit_str_expr, ident_callee, ident_expr, ident_name},
+        common_into_expressions::{
+            create_lit_str_expr, ident_callee, ident_expr, ident_name, simple_member_expression,
+        },
         generate_var_names::{generate_add_event_listener, generate_el, DELEGATE_EVENTS},
     },
     transform::parent_visitor::ParentVisitor,
@@ -23,7 +21,7 @@ use crate::{
 const ADD_EVENT_LISTENER: &str = "addEventListener";
 
 fn use_double_dolar_syntax<T: ParentVisitor>(parent_visitor: &mut T, expr: &Box<Expr>) -> bool {
-    expr.is_array_lit()
+    expr.is_array()
         || expr.is_arrow()
         || expr.is_fn_expr()
         || if let Some(ident) = expr.as_ident() {
@@ -31,17 +29,6 @@ fn use_double_dolar_syntax<T: ParentVisitor>(parent_visitor: &mut T, expr: &Box<
         } else {
             false
         }
-}
-
-fn simple_member_expression(obj_name: Atom, prop_name: Atom) -> MemberExpr {
-    MemberExpr {
-        span: DUMMY_SP,
-        obj: ident_expr(obj_name),
-        prop: MemberProp::Ident(IdentName {
-            span: DUMMY_SP,
-            sym: prop_name,
-        }),
-    }
 }
 
 fn add_event_listener_capture(element_count: usize, args: Vec<ExprOrSpread>) -> Box<Expr> {

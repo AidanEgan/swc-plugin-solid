@@ -10,7 +10,7 @@ use crate::{
     },
     helpers::{
         common_into_expressions::{ident_callee, ident_expr},
-        generate_var_names::{generate_el, generate_set_attribute},
+        generate_var_names::{generate_el, SET_ATTRIBUTE, SET_BOOLEAN_ATTRIBUTE},
     },
     transform::parent_visitor::ParentVisitor,
 };
@@ -20,6 +20,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
         &mut self,
         prop_name: Atom,
         element_count: usize,
+        is_bool_attr: bool,
         data: PossibleEffectStatement,
     ) {
         let (data, effect_vars) = match self.effect_or_inline_or_expr(data) {
@@ -31,12 +32,16 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                 return;
             }
         };
-        self.parent_visitor
-            .add_import(generate_set_attribute().as_str().into());
+        let callee = if is_bool_attr {
+            SET_BOOLEAN_ATTRIBUTE
+        } else {
+            SET_ATTRIBUTE
+        };
+        self.parent_visitor.add_import(callee.into());
         let set_attribute = CallExpr {
             span: DUMMY_SP,
             ctxt: SyntaxContext::empty(),
-            callee: ident_callee(generate_set_attribute()),
+            callee: ident_callee(callee.into()),
             type_args: None,
             args: vec![
                 ident_expr(generate_el(element_count)).into(),

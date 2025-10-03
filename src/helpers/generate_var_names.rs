@@ -10,13 +10,11 @@ const EFFECT_ARG: &str = "_p$";
 
 // Imported values
 const TEMPLATE: &str = "_$template";
-const USE: &str = "_$use";
 const MEMO: &str = "_&memo";
 const CREATE_COMPONENT: &str = "_$createComponent";
 const MERGE_PROPS: &str = "_$mergeProps";
 const ADD_EVENT_LISTENER: &str = "_$addEventListener";
 const INSERT: &str = "_$insert";
-const SET_ATTRIBUTE: &str = "_$setAttribute";
 const EFFECT: &str = "_$effect";
 const CLASS_NAME: &str = "_$className";
 
@@ -27,6 +25,9 @@ pub const STYLE: &str = "_$style";
 pub const SET_STYLE_PROPERTY: &str = "_$setStyleProperty";
 pub const SPREAD: &str = "_$spread";
 pub const CLASS_LIST: &str = "_$classList";
+pub const SET_ATTRIBUTE: &str = "_$setAttribute";
+pub const SET_BOOLEAN_ATTRIBUTE: &str = "_$setBoolAttribute";
+pub const USE: &str = "_$use";
 
 pub fn generate_template_name(id: usize) -> Atom {
     format!("{0}{1}", TMPL, id).into()
@@ -49,9 +50,6 @@ pub fn generate_template_expr_name() -> Atom {
 pub fn generate_import_name(name: Atom) -> Atom {
     name.split(PATTERN).nth(1).unwrap_or("").into()
 }
-pub fn generate_use() -> Atom {
-    USE.into()
-}
 pub fn generate_ref(cnt: usize) -> Atom {
     format!("{0}{1}", REF, cnt).into()
 }
@@ -69,10 +67,6 @@ pub fn generate_ref_raw() -> Atom {
 
 pub fn generate_add_event_listener() -> Atom {
     ADD_EVENT_LISTENER.into()
-}
-
-pub fn generate_set_attribute() -> Atom {
-    SET_ATTRIBUTE.into()
 }
 
 pub fn generate_effect() -> Atom {

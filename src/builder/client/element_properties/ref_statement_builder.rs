@@ -11,7 +11,7 @@ use crate::{
     builder::client::element_properties::ElementPropertiesBuilder,
     helpers::{
         common_into_expressions::{ident_callee, ident_expr, ident_name},
-        generate_var_names::{generate_el, generate_ref, generate_use},
+        generate_var_names::{generate_el, generate_ref, USE},
     },
     transform::parent_visitor::ParentVisitor,
 };
@@ -154,8 +154,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
             ref_expr,
         );
         if used_use {
-            self.parent_visitor
-                .add_import(generate_use().as_str().into());
+            self.parent_visitor.add_import(USE.into());
         };
     }
 }

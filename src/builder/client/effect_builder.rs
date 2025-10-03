@@ -18,10 +18,11 @@ use crate::{
 
 #[derive(Debug)]
 pub enum EffectVariant {
+    Prop,
     Class,
     ClassList(bool), // Determines if _$className or el.classname.toggle is used
     Style(Option<PropName>), // Determines which style js fn to use
-    Std,
+    Std(bool),       // true = setBooleanAttr, false = setAttr
 }
 
 #[derive(Debug)]
@@ -129,11 +130,18 @@ impl EffectBuilder {
         if stmts.len() == 1 {
             let only_stmt = stmts.pop()?;
             if let Stmt::Expr(inner_expr) = only_stmt {
+                let expr = if inner_expr.expr.is_paren()
+                    && inner_expr.expr.as_paren().unwrap().expr.is_assign()
+                {
+                    inner_expr.expr.expect_paren().expr
+                } else {
+                    inner_expr.expr
+                };
                 let box_e: Box<Expr> = if !self.uses_arg {
-                    wrap_in_empty_arrow(BlockStmtOrExpr::Expr(inner_expr.expr).into()).into()
+                    wrap_in_empty_arrow(BlockStmtOrExpr::Expr(expr).into()).into()
                 } else {
                     wrap_in_arrow(
-                        BlockStmtOrExpr::Expr(inner_expr.expr).into(),
+                        BlockStmtOrExpr::Expr(expr).into(),
                         vec![Pat::Ident(generate_effect_arg().into())],
                     )
                     .into()
