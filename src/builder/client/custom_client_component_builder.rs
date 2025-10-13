@@ -92,7 +92,7 @@ fn build_props_oject_expr(props: Vec<(Atom, Box<Expr>)>) -> Box<Expr> {
                 // No transformation done, ownership of expr moves back here
                 if let Some(returned_val) =
                     // "Other tuple val returns '_use' usage not needed here"
-                    create_ref_statements(&mut statements, &mut 0, None, val).0
+                    create_ref_statements(&mut statements, &mut 0, None, val, false).0
                 {
                     val = returned_val;
                 } else {

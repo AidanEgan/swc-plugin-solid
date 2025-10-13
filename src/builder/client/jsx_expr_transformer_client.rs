@@ -3,7 +3,7 @@
 use swc_core::{
     common::util::take::Take,
     ecma::{
-        ast::{BlockStmtOrExpr, Expr},
+        ast::{BinaryOp, BlockStmtOrExpr, Expr},
         visit::{VisitMut, VisitMutWith},
     },
 };
@@ -69,6 +69,7 @@ impl<'a, T: ParentVisitor> VisitMut for ClientJsxExprTransformer<'a, T> {
             || node.is_arrow()
             || node.is_fn_expr()
             || node.is_member()
+            || (node.is_bin() && node.as_bin().unwrap().op == BinaryOp::In)
         {
             self.should_wrap_in_effect = true;
         }

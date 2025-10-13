@@ -34,44 +34,7 @@ fn create_new_expr_possible<T: ParentVisitor>(
     // Bizarre syntax and feels wrong, but does work :(
     match unwrapped {
         Expr::JSXElement(e) => Ok(e.visit_and_build_from_jsx(attacher)),
-        Expr::JSXFragment(e) => {
-            if e.children.len() == 1 {
-                Ok(e.visit_and_build_from_jsx(attacher))
-            } else {
-                // Each element will be evaluated recursively
-                let transformed_elems = e.children.iter().map(|el| {
-                    match el {
-                        JSXElementChild::JSXElement(jsx) => {
-                            Some(Expr::JSXElement(jsx.clone()).into())
-                        }
-                        JSXElementChild::JSXFragment(frag) => {
-                            Some(Expr::JSXFragment(frag.clone()).into())
-                        }
-                        JSXElementChild::JSXSpreadChild(spr) => {
-                            // Add spread name
-                            Some(spr.expr.clone().into())
-                        }
-                        JSXElementChild::JSXExprContainer(cont) => match cont.expr.clone() {
-                            JSXExpr::Expr(e) => Some(e.into()),
-                            JSXExpr::JSXEmptyExpr(_) => None,
-                        },
-                        JSXElementChild::JSXText(txt) => {
-                            let val = Str {
-                                span: DUMMY_SP,
-                                value: txt.value.as_str().trim().into(),
-                                raw: None,
-                            };
-                            Some(Expr::Lit(Lit::Str(val)).into())
-                        }
-                    }
-                });
-                let arr = ArrayLit {
-                    span: DUMMY_SP,
-                    elems: transformed_elems.collect(),
-                };
-                Ok(Box::new(Expr::Array(arr)))
-            }
-        }
+        Expr::JSXFragment(e) => Ok(e.visit_and_build_from_jsx(attacher)),
         /*
          * With the generic 'expr' visitor these are redundant. That visitor will do this for us
         Expr::Paren(e) => {

@@ -175,4 +175,9 @@ mod tests {
     fn class_list_test() {
         std_format_test("components", "class_list_test.tsx");
     }
+
+    #[test]
+    fn attribute_expressions_test() {
+        std_format_test("attribute_expressions", "code.jsx");
+    }
 }

@@ -25,7 +25,11 @@ pub fn parse_attrs(
                             }
                             i.sym.clone()
                         }
-                        JSXAttrName::JSXNamespacedName(nn) => nn.name.sym.clone(),
+                        JSXAttrName::JSXNamespacedName(nn) => {
+                            format!("{0}:{1}", nn.ns.sym.as_str(), nn.name.sym.as_str())
+                                .as_str()
+                                .into()
+                        }
                     };
                     Some(name)
                 }

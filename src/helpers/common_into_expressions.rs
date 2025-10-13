@@ -16,9 +16,21 @@ pub fn ident_name(name: Atom, is_pure: bool) -> Ident {
     }
 }
 
+pub fn ident_name_safe(name: Atom, is_pure: bool) -> Result<Ident, String> {
+    if cannot_convert_to_ident(&name) {
+        Err(name.to_string())
+    } else {
+        Ok(ident_name(name, is_pure))
+    }
+}
+
+pub fn cannot_convert_to_ident(name: &Atom) -> bool {
+    return name.contains("-");
+}
+
 pub fn ident_expr(name: Atom) -> Box<Expr> {
     // Will break
-    let ex: Expr = if name.contains("-") {
+    let ex: Expr = if cannot_convert_to_ident(&name) {
         // String-ify
         name.into()
     } else {

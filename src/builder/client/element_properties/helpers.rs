@@ -4,14 +4,17 @@ use swc_core::{
     ecma::{
         ast::{
             AssignExpr, AssignTarget, BinExpr, BlockStmt, CallExpr, Expr, ExprOrSpread, ExprStmt,
-            GetterProp, Ident, IdentName, KeyValueProp, MemberExpr, Prop, PropName, ReturnStmt,
-            SimpleAssignTarget, Stmt,
+            GetterProp, Ident, IdentName, KeyValueProp, MemberExpr, ParenExpr, Prop, PropName,
+            ReturnStmt, SimpleAssignTarget, Stmt,
         },
         utils::number::ToJsString,
     },
 };
 
-use crate::helpers::{common_into_expressions::ident_callee, generate_var_names::USE};
+use crate::helpers::{
+    common_into_expressions::{ident_callee, ident_name_safe},
+    generate_var_names::USE,
+};
 
 pub fn key_to_atom(key: PropName) -> Option<Atom> {
     match key {
@@ -23,10 +26,6 @@ pub fn key_to_atom(key: PropName) -> Option<Atom> {
         // Should not be possible
         PropName::Computed(_) => None,
     }
-}
-
-fn atom_to_key(atom: Atom) -> PropName {
-    todo!();
 }
 
 pub type Effect = (Ident, MemberExpr);
@@ -45,10 +44,15 @@ pub fn generate_effect_assignment(data: &Effect) -> Box<Expr> {
     let assign = AssignExpr {
         span: DUMMY_SP,
         op: swc_core::ecma::ast::AssignOp::Assign,
-        left: AssignTarget::Simple(SimpleAssignTarget::Ident(data.0.clone().into())),
-        right: data.1.clone().into(),
+        left: AssignTarget::Simple(SimpleAssignTarget::Member(data.1.clone())),
+        right: data.0.clone().into(),
     };
-    Box::new(assign.into())
+    // Swc may remove parens if not needed
+    Expr::Paren(ParenExpr {
+        span: DUMMY_SP,
+        expr: assign.into(),
+    })
+    .into()
 }
 
 pub fn generate_effect_statement(data: Effect, expr: Box<Expr>) -> Stmt {
@@ -100,10 +104,27 @@ pub fn merge_prop_as_getter(key: Atom, value: Box<Expr>) -> Box<Prop> {
     .into()
 }
 
+fn merge_prop_ident_if_possible(key: Atom) -> PropName {
+    match ident_name_safe(key, false) {
+        Ok(ident) => PropName::Ident(ident.into()),
+        Err(key) => PropName::Str(key.as_str().into()),
+    }
+}
+
 pub fn merge_prop_as_kv(key: Atom, value: Box<Expr>) -> Box<Prop> {
     Prop::KeyValue(KeyValueProp {
-        key: PropName::Str(key.as_str().into()),
+        key: merge_prop_ident_if_possible(key),
         value,
     })
+    .into()
+}
+
+pub fn template_lit_class_expr(expr: Box<Expr>) -> Box<Expr> {
+    BinExpr {
+        span: DUMMY_SP,
+        op: swc_core::ecma::ast::BinaryOp::LogicalOr,
+        left: expr,
+        right: "".into(),
+    }
     .into()
 }

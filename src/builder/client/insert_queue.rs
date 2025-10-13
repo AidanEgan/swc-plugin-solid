@@ -47,6 +47,9 @@ impl InsertQueue {
         self.queue.push(new_val);
         self.was_first_el = self.was_first_el || was_first;
     }
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
 }
 
 pub struct InsertBuilder {

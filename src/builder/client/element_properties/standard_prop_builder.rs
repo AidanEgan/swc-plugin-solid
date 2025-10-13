@@ -1,7 +1,7 @@
 use swc_core::{
     atoms::Atom,
     common::{SyntaxContext, DUMMY_SP},
-    ecma::ast::{CallExpr, ExprStmt, Stmt},
+    ecma::ast::{CallExpr, Expr, ExprStmt, Stmt},
 };
 
 use crate::{
@@ -45,7 +45,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
             type_args: None,
             args: vec![
                 ident_expr(generate_el(element_count)).into(),
-                ident_expr(prop_name).into(),
+                Expr::from(prop_name).into(),
                 data.into(),
             ],
         };

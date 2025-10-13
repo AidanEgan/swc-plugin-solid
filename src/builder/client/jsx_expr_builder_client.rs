@@ -10,7 +10,7 @@ use crate::{
             },
             custom_client_component_builder::ClientCustomComponentBuilder,
             effect_builder::EffectBuilder,
-            element_properties::ElementPropertiesBuilder,
+            element_properties::{ElementPropertiesBuilder, StatementInserts},
             insert_queue::{InsertBuilder, InsertQueue, PossibleInsert},
             jsx_expr_transformer_client::ClientJsxExprTransformer,
         },
@@ -53,12 +53,14 @@ fn add_closes(templ_string: &mut String, closing_el_builder: &mut String) {
 
 fn add_opening(
     templ_string: &mut String,
-    parent_element_stack: &mut Vec<usize>,
+    parent_element_stack: Option<&mut Vec<usize>>,
     opening_el: &str,
     props: Option<Vec<(String, String)>>,
     count: usize,
 ) {
-    parent_element_stack.push(count);
+    if let Some(parent_element_stack) = parent_element_stack {
+        parent_element_stack.push(count);
+    }
     *templ_string += "<";
     *templ_string += opening_el;
     if let Some(props) = props {
@@ -105,6 +107,7 @@ fn handle_fragment_chunks<T: ParentVisitor>(
     mut frag: JsxFragmentMetadata<ClientJsxElementVisitor>,
     parent_visitor: &mut T,
 ) -> BuildResults {
+    println!("\nBuilding: {:?}\n", frag);
     if frag.children.len() == 1 {
         let mut build_res = build_js_from_client_jsx(frag.children.remove(0), parent_visitor);
         memo_call_expr_mut(&mut build_res);
@@ -161,7 +164,6 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
     let mut parent_element_stack: Vec<usize> = Vec::new();
 
     /* Helper utils so we don't have to re-traverse the vec */
-    let mut needs_long_form = false;
     let mut insert_queue = InsertQueue::new();
     let mut block_builder = BlockExprBuilder::new();
     let mut effect_builder = EffectBuilder::new();
@@ -171,6 +173,7 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
         let count = *(parent_visitor.element_count());
         match part {
             JsxTemplateKind::Opening(open) => {
+                let implicit_self_close = open.implicit_self_close;
                 templ_ce = templ_ce || open.is_ce;
                 templ_svg = templ_svg || open.is_svg;
                 add_closes(&mut templ_string, &mut closing_el_builder);
@@ -179,47 +182,73 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
                 let (el_name, tmpl_inserts) = if num_els > 0 {
                     let mut property_builder =
                         ElementPropertiesBuilder::new(parent_visitor, &mut effect_builder);
-                    let name = property_builder.build_el_property_statements(open, count);
-                    // "Long form omitted if all properties were inlined"
-                    needs_long_form = needs_long_form
-                        || (num_els != property_builder.direct_template_inserts.len());
+                    let (element_name, all_data_inlined) =
+                        property_builder.build_el_property_statements(open, count);
+
+                    // Check if all attrs were not inlined
+                    if !all_data_inlined {
+                        block_builder.set_last_used_decl(count);
+                    }
                     for to_insert in property_builder.statements.drain(..) {
                         block_builder.add_stmt(to_insert);
                     }
+                    // Insert this BEFORE special inserts
+                    block_builder.add_decl(count);
+                    for statement_insert in property_builder.statement_inserts {
+                        match statement_insert {
+                            StatementInserts::TextContentData => {
+                                // Add space and statement
+                                templ_string += " ";
+                                block_builder.add_decl_specific(
+                                    count + 1,
+                                    crate::builder::builder_types::ElDeclKinds::FirstChild(count),
+                                );
+                            }
+                        }
+                    }
                     (
-                        name,
+                        element_name,
                         Some(std::mem::take(
                             &mut property_builder.direct_template_inserts,
                         )),
                     )
                 } else {
+                    // Regular insert
+                    block_builder.add_decl(count);
                     (open.value, None)
                 };
-
                 add_opening(
                     &mut templ_string,
-                    &mut parent_element_stack,
+                    if !implicit_self_close {
+                        Some(&mut parent_element_stack)
+                    } else {
+                        None
+                    },
                     &el_name,
                     tmpl_inserts,
                     count,
                 );
-                block_builder.add_decl(count);
+
                 insert_queue
                     .drain_insert_queue(PossibleInsert::At(count), block_builder.get_final_stmts());
-                block_builder.set_kind(Kind::Open(count));
+                block_builder.set_kind(Kind::Open(count, implicit_self_close));
                 *(parent_visitor.element_count()) += 1;
             }
             JsxTemplateKind::Closing(close) => {
-                parent_element_stack.pop();
+                // The 'next sibling' is in reference to the opening element's id
+                let open_id = parent_element_stack.pop();
                 closing_el_builder += "</";
                 closing_el_builder += &(close + ">");
-                block_builder.add_decl(count);
                 insert_queue
                     .drain_insert_queue(PossibleInsert::Null, block_builder.get_final_stmts());
-                block_builder.set_kind(Kind::Close(count));
+                // open_id SHOULD always be defined
+                block_builder.set_kind(Kind::Close(
+                    open_id.expect("Closing tag should have corresponding open tag"),
+                ));
+                // Do not incremement element_count or add_decl. Not referenced in template
             }
             JsxTemplateKind::Text(txt) => {
-                if let Kind::Placeholder(_, false) = block_builder.prev_kind {
+                if let Kind::Placeholder(_, false, _) = block_builder.prev_kind {
                     templ_string += "<!>"; //Placeholder in templ syntax
                     block_builder.add_decl(count);
                     *(parent_visitor.element_count()) += 1;
@@ -233,7 +262,7 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
             }
             // Needs long form true
             JsxTemplateKind::Placeholder(p) => {
-                needs_long_form = true;
+                block_builder.set_last_used_decl(count);
                 // Only gets added to template in case it is sandwhiched between two
                 // jsxtext elements. So it's template addition is handled above instead
                 // of here.
@@ -262,50 +291,74 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
                                 parent_el: *parent_element_stack.last().unwrap_or(&0_usize), // There should always be an element
                                 expr: placeholder_expr,
                             },
-                            matches!(block_builder.prev_kind, Kind::Open(_)),
+                            matches!(block_builder.prev_kind, Kind::Open(_, _)),
                         );
                     }
                 }
                 block_builder.set_kind(Kind::Placeholder(
-                    count,
+                    match block_builder.prev_kind {
+                        Kind::Open(at, _) => at,
+                        Kind::Placeholder(at, _, _) => at,
+                        Kind::Text(at) => at,
+                        Kind::Close(at) => at,
+                        Kind::None => count,
+                    },
                     match block_builder.prev_kind {
                         Kind::Text(_) => false,
-                        Kind::Placeholder(_, bool) => bool,
+                        Kind::Placeholder(_, bool, _) => bool,
                         _ => true,
+                    },
+                    match block_builder.prev_kind {
+                        Kind::Placeholder(_, _, bool) => bool,
+                        Kind::Open(_, is_self_closing) => !is_self_closing,
+                        Kind::None => true,
+                        _ => false,
                     },
                 ));
             }
         }
     }
     let temp_id = parent_visitor.register_template(templ_string.as_str(), templ_ce, templ_svg);
-    // Most basic case, just returns the tmplate string
-    if !needs_long_form {
+
+    if block_builder.last_used_decl.is_some() {
+        insert_queue.drain_insert_queue(PossibleInsert::Undefined, block_builder.get_final_stmts());
+        if insert_queue.used_insert {
+            parent_visitor.add_import(generate_insert().as_str().into());
+        }
+        // Does need long form
+        // This should always be true - Rust just likes to be very sure :)
+        // Save for return stmt
+        block_builder.add_decls_to_final(temp_id);
+        let mut add_import = false;
+        // Check for effects
+        let mut property_builder =
+            ElementPropertiesBuilder::new(parent_visitor, &mut effect_builder);
+        if let Some(stmt) = property_builder.build_effect_statement(false) {
+            add_import = true;
+            block_builder.add_penultimate_stmt(stmt);
+        }
+        while let Some(isolated_effect_stmt) = property_builder.build_effect_statement(true) {
+            add_import = true;
+            block_builder.add_penultimate_stmt(isolated_effect_stmt);
+        }
+
+        if add_import {
+            parent_visitor.add_import(generate_effect().as_str().into());
+        }
+
+        BuildResults::Block(BlockStmt {
+            span: DUMMY_SP,
+            ctxt: SyntaxContext::empty(),
+            stmts: block_builder.take_final_stmts(),
+        })
+    } else {
+        // Most basic case, just returns the tmplate string
+
         let name = Ident::new(
             generate_template_name(temp_id),
             DUMMY_SP,
             SyntaxContext::empty(),
         );
-        return BuildResults::Id(name);
+        BuildResults::Id(name)
     }
-    insert_queue.drain_insert_queue(PossibleInsert::Undefined, block_builder.get_final_stmts());
-    if insert_queue.used_insert {
-        parent_visitor.add_import(generate_insert().as_str().into());
-    }
-    // Does need long form
-    // This should always be true - Rust just likes to be very sure :)
-    // Save for return stmt
-    block_builder.add_decls_to_final(temp_id);
-
-    // Check for effects
-    let mut property_builder = ElementPropertiesBuilder::new(parent_visitor, &mut effect_builder);
-    if let Some(stmt) = property_builder.build_effect_statement() {
-        parent_visitor.add_import(generate_effect().as_str().into());
-        block_builder.add_penultimate_stmt(stmt);
-    };
-    BuildResults::Block(BlockStmt {
-        span: DUMMY_SP,
-        ctxt: SyntaxContext::empty(),
-        stmts: block_builder.take_final_stmts(),
-    })
-    // Still need to add all different handlers. Custom logic for styles and classnames
 }

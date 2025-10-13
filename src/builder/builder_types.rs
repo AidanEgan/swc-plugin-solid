@@ -36,8 +36,8 @@ pub enum ElDeclKinds {
 
 pub enum Kind {
     None,
-    Open(usize),
+    Open(usize, bool),
     Close(usize),
     Text(usize),
-    Placeholder(usize, bool), // Was skipped in template
+    Placeholder(usize, bool, bool), // Was skipped in template, prev first child
 }

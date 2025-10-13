@@ -1,8 +1,8 @@
 use swc_core::{
     common::{SyntaxContext, DUMMY_SP},
     ecma::ast::{
-        AssignExpr, AssignTarget, BinExpr, BindingIdent, CallExpr, CondExpr, Decl, Expr, ExprStmt,
-        Lit, Pat, SimpleAssignTarget, Stmt, UnaryExpr, UnaryOp, VarDecl, VarDeclKind,
+        ArrayPat, AssignExpr, AssignTarget, BinExpr, BindingIdent, CallExpr, CondExpr, Decl, Expr,
+        ExprStmt, Lit, Pat, SimpleAssignTarget, Stmt, UnaryExpr, UnaryOp, VarDecl, VarDeclKind,
         VarDeclarator,
     },
 };
@@ -16,6 +16,14 @@ use crate::{
     transform::parent_visitor::ParentVisitor,
 };
 
+fn can_assign(expr: Box<Expr>) -> Option<AssignTarget> {
+    match *expr {
+        Expr::Ident(x) => Some(AssignTarget::Simple(SimpleAssignTarget::Ident(x.into()))),
+        Expr::Member(x) => Some(AssignTarget::Simple(SimpleAssignTarget::Member(x.into()))),
+        _ => None,
+    }
+}
+
 // Fns for each type of opening element
 // Returns og expr if not transformed
 pub fn create_ref_statements(
@@ -23,6 +31,7 @@ pub fn create_ref_statements(
     local_ref_count: &mut usize,
     element_count: Option<usize>,
     ref_expr: Box<Expr>,
+    is_const: bool,
 ) -> (Option<Box<Expr>>, bool) {
     /*
      * Custom
@@ -42,7 +51,7 @@ pub fn create_ref_statements(
     let mut import_use = false;
 
     // As fn
-    if ref_expr.is_arrow() || ref_expr.is_fn_expr() {
+    if is_const || ref_expr.is_arrow() || ref_expr.is_fn_expr() {
         if element_count.is_none() {
             // Terminate early for custom component
             return (Some(ref_expr), import_use);
@@ -50,7 +59,10 @@ pub fn create_ref_statements(
         import_use = true;
         statements.push(Stmt::Expr(ExprStmt {
             span: DUMMY_SP,
-            expr: super::helpers::generate_use_expr(vec![ref_expr.into()]),
+            expr: super::helpers::generate_use_expr(vec![
+                ref_expr.into(),
+                ident_expr(generate_el(element_count.unwrap())).into(),
+            ]),
         }));
         return (None, import_use);
     }
@@ -92,14 +104,11 @@ pub fn create_ref_statements(
         }))
     };
 
-    let assignment_ternary_arm = ref_expr.ident().map(|ident| {
+    let assignment_ternary_arm = can_assign(ref_expr).map(|assign_target| {
         Expr::Assign(AssignExpr {
             span: DUMMY_SP,
             op: swc_core::ecma::ast::AssignOp::Assign,
-            left: AssignTarget::Simple(SimpleAssignTarget::Ident(BindingIdent {
-                id: ident,
-                type_ann: None,
-            })),
+            left: assign_target,
             right: Box::new({
                 let name = if let Some(element_count) = element_count {
                     generate_el(element_count)
@@ -147,11 +156,27 @@ pub fn create_ref_statements(
 
 impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
     pub fn ref_builder(&mut self, element_count: Option<usize>, ref_expr: Box<Expr>) {
+        let mut is_const = false;
+        // Can be inlined
+        if element_count.is_some() {
+            if let Some(n) = ref_expr.as_ident() {
+                match self.check_class_name_in_scope(&n.sym) {
+                    Ok(val) => {
+                        self.direct_template_inserts.push(("ref".into(), val));
+                        return;
+                    }
+                    Err(tracked_is_const) => {
+                        is_const = tracked_is_const;
+                    }
+                }
+            }
+        }
         let (_, used_use) = create_ref_statements(
             &mut self.statements,
             self.parent_visitor.ref_count(),
             element_count,
             ref_expr,
+            is_const,
         );
         if used_use {
             self.parent_visitor.add_import(USE.into());

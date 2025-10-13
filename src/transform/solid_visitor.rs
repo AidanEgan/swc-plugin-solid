@@ -10,7 +10,9 @@ use std::collections::{BTreeSet, HashMap};
 use swc_core::common::comments::Comment;
 use swc_core::common::source_map::SmallPos;
 use swc_core::common::{BytePos, Spanned};
-use swc_core::ecma::ast::{BlockStmt, Decl, FnDecl, Function, ModuleItem, Program, Stmt, VarDecl};
+use swc_core::ecma::ast::{
+    BlockStmt, Decl, FnDecl, Function, ModuleItem, Program, Stmt, VarDecl, VarDeclKind,
+};
 use swc_core::ecma::visit::VisitMutWith;
 use swc_core::{
     common::{comments::Comments, SourceMapper},
@@ -195,8 +197,9 @@ impl<C: Clone + Comments, S: SourceMapper> VisitMut for SolidJsVisitor<C, S> {
     // Scope manager - a few places need to have context about vars
 
     fn visit_mut_var_decl(&mut self, n: &mut VarDecl) {
+        let is_const = n.kind == VarDeclKind::Const;
         for declarator in &n.decls {
-            self.scope_manager.add_var(declarator);
+            self.scope_manager.add_var(declarator, is_const);
         }
         n.visit_mut_children_with(self);
     }
@@ -204,7 +207,7 @@ impl<C: Clone + Comments, S: SourceMapper> VisitMut for SolidJsVisitor<C, S> {
     // Function Declarations
     fn visit_mut_fn_decl(&mut self, n: &mut FnDecl) {
         self.scope_manager
-            .declare_variable(n.ident.sym.clone(), TrackedVariable::FunctionIdent);
+            .declare_variable(n.ident.sym.clone(), TrackedVariable::FunctionIdent(false));
         n.visit_mut_children_with(self);
     }
 

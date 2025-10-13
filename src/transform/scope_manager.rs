@@ -7,9 +7,10 @@ use swc_core::{
 
 #[derive(Debug, Clone)]
 pub enum TrackedVariable {
-    Literal(String), // Literal string/num value. Used for classname optimization
-    FunctionIdent,   // Variable used to initialize a fn. Used for delegated events
-    Referred(Atom),  // Re-assigns an already tracked var
+    Literal(String),     // Literal string/num value. Used for classname optimization
+    FunctionIdent(bool), // Variable used to initialize a fn. Used for delegated events
+    Referred(Atom),      // Re-assigns an already tracked var
+    StoredConstant,      // Refs track 'const' vars
 }
 
 pub struct ScopeManager {
@@ -54,12 +55,15 @@ impl ScopeManager {
         None
     }
 
-    pub fn add_var(&mut self, declarator: &VarDeclarator) {
+    pub fn add_var(&mut self, declarator: &VarDeclarator, is_const: bool) {
         if let Some(some_expr) = &declarator.init {
             match &declarator.name {
                 Pat::Ident(ident) => {
                     if some_expr.is_arrow() || some_expr.is_fn_expr() {
-                        self.declare_variable(ident.sym.clone(), TrackedVariable::FunctionIdent);
+                        self.declare_variable(
+                            ident.sym.clone(),
+                            TrackedVariable::FunctionIdent(is_const),
+                        );
                         return;
                     }
                     if let Some(other_ident) = some_expr.as_ident() {
@@ -68,8 +72,8 @@ impl ScopeManager {
                                 ident.sym.clone(),
                                 TrackedVariable::Referred(other_ident.sym.clone()),
                             );
+                            return;
                         }
-                        return;
                     }
                     if let Some(lit) = some_expr.as_lit() {
                         match lit {
@@ -84,6 +88,9 @@ impl ScopeManager {
                             _ => { /* Skip */ }
                         }
                         return;
+                    }
+                    if is_const {
+                        self.declare_variable(ident.sym.clone(), TrackedVariable::StoredConstant);
                     }
                 }
                 _ => { /* Handle other patterns */ }

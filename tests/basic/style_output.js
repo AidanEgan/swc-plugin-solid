@@ -51,10 +51,10 @@ function Counter5() {
     return (()=>{
         var _el$3 = _tmpl$2();
         _$insert(_el$3, count);
-        _$effect(()=>_$style(_el$3, {
+        _$effect((_p$)=>_$style(_el$3, {
                 border: "1px solid red",
                 ...vals
-            }));
+            }, _p$));
         return _el$3;
     })();
 }

@@ -8,7 +8,10 @@ use crate::{
     builder::client::element_properties::{
         helpers::generate_effect_assignment, ElementPropertiesBuilder, PossibleEffectStatement,
     },
-    helpers::{common_into_expressions::simple_member_expression, generate_var_names::generate_el},
+    helpers::{
+        common_into_expressions::simple_member_expression, component_helpers::is_falsy_lit,
+        generate_var_names::generate_el,
+    },
     transform::parent_visitor::ParentVisitor,
 };
 
@@ -18,6 +21,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
         prop_name: Atom,
         element_count: usize,
         data: PossibleEffectStatement,
+        can_inline: bool,
     ) {
         let (data, effect_vars) = match data {
             PossibleEffectStatement::Std(std) => (std, None),
@@ -30,12 +34,21 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
             }
         };
 
-        let is_text_content = prop_name.as_str() == "textContent";
-        let prop_name = if is_text_content && effect_vars.is_some() {
-            "data".into()
-        } else {
-            prop_name
-        };
+        if can_inline && data.is_lit() {
+            if data.as_lit().unwrap().is_num() || data.as_lit().unwrap().is_str() {
+                let data = data.expect_lit();
+                match data {
+                    swc_core::ecma::ast::Lit::Str(s) => self
+                        .direct_template_inserts
+                        .push((prop_name.to_string(), s.value.to_string())),
+                    swc_core::ecma::ast::Lit::Num(n) => self
+                        .direct_template_inserts
+                        .push((prop_name.to_string(), n.value.to_string())),
+                    _ => { /* Not actually reachable :) */ }
+                }
+                return;
+            }
+        }
 
         let expr: Box<Expr> = AssignExpr {
             span: DUMMY_SP,

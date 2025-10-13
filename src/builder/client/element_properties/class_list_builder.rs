@@ -14,8 +14,8 @@ use crate::{
     builder::client::{
         effect_builder::EffectVariant,
         element_properties::{
-            helpers::key_to_atom, EffectOrInlineOrExpression, ElementPropertiesBuilder,
-            PossibleEffectStatement,
+            helpers::key_to_atom, ClassBuilderVariants, EffectOrInlineOrExpression,
+            ElementPropertiesBuilder, PossibleEffectStatement,
         },
         jsx_expr_transformer_client::ClientJsxExprTransformer,
     },
@@ -27,13 +27,11 @@ use crate::{
     transform::parent_visitor::ParentVisitor,
 };
 
-const CLASS: &str = "class";
-
-fn create_class_list(element_count: usize, expr: Box<Expr>, with_parameter: bool) -> Box<Expr> {
+fn create_class_list(element_count: usize, expr: Box<Expr>, extra_arg: Option<Atom>) -> Box<Expr> {
     let mut args: Vec<ExprOrSpread> =
         vec![ident_expr(generate_el(element_count)).into(), expr.into()];
-    if with_parameter {
-        args.push(ident_expr(generate_effect_arg()).into());
+    if let Some(extra_arg) = extra_arg {
+        args.push(ident_expr(extra_arg).into());
     }
     CallExpr {
         span: DUMMY_SP,
@@ -45,7 +43,12 @@ fn create_class_list(element_count: usize, expr: Box<Expr>, with_parameter: bool
     .into()
 }
 
-fn create_class_list_toggle(element_count: usize, key: &str, expr: Box<Expr>) -> Box<Expr> {
+fn create_class_list_toggle(
+    element_count: usize,
+    key: &str,
+    expr: Box<Expr>,
+    double_negate: bool,
+) -> Box<Expr> {
     CallExpr {
         span: DUMMY_SP,
         ctxt: SyntaxContext::empty(),
@@ -70,7 +73,11 @@ fn create_class_list_toggle(element_count: usize, key: &str, expr: Box<Expr>) ->
         ),
         args: vec![
             Expr::from(Atom::from(key)).into(),
-            create_double_negated(expr).into(),
+            if double_negate {
+                create_double_negated(expr).into()
+            } else {
+                expr.into()
+            },
         ],
         type_args: None,
     }
@@ -83,7 +90,7 @@ fn needs_class_list(props: &Vec<PropOrSpread>) -> bool {
             if let Some(prop) = prop.as_key_value() {
                 prop.key.is_computed()
                     || if let Some(prop) = prop.key.as_str() {
-                        prop.value.as_str().contains(|c| c == '-' || c == ' ')
+                        prop.value.as_str().contains(|c| c == ':' || c == ' ')
                     } else {
                         false
                     }
@@ -139,17 +146,13 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
             EffectOrInlineOrExpression::ExpressionRes(data) => (data, None),
             EffectOrInlineOrExpression::InlineRes(ir) => {
                 if let Some(key) = key {
-                    if let Some(classes) = self
-                        .direct_template_inserts
-                        .iter_mut()
-                        .find(|(v, _)| v.as_str() == CLASS)
-                    {
-                        classes.1 += " ";
-                        classes.1 += key;
-                    } else {
-                        self.direct_template_inserts
-                            .push((CLASS.into(), key.into()));
+                    // Falsy
+                    if key.is_empty() {
+                        return;
                     }
+                    self.class_builder_data
+                        .1
+                        .push(ClassBuilderVariants::Lit(key.into()));
                 } else {
                     self.direct_template_inserts.push(("classlist".into(), ir));
                 }
@@ -157,13 +160,15 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
             }
         };
         let expr: Box<Expr> = if let Some(key) = key {
-            create_class_list_toggle(element_count, key, data)
+            create_class_list_toggle(element_count, key, data, effect_vars.is_none())
         } else {
             self.parent_visitor.add_import(CLASS_LIST.into());
-            if is_in_effect {
-                self.effect_builder.set_uses_arg(true);
-            }
-            create_class_list(element_count, data, is_in_effect)
+            let effect_arg = if is_in_effect {
+                Some(self.effect_builder.get_effect_arg())
+            } else {
+                None
+            };
+            create_class_list(element_count, data, effect_arg)
         };
         if let Some(effect_vars) = effect_vars {
             self.statements
@@ -266,7 +271,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                 self.class_list_parser(element_count, obj, should_effect);
             }
         } else {
-            let transformed = self.std_transform(attr, false);
+            let transformed = self.std_transform(attr, false, None);
             if self.tmp_wrap_effect || (should_effect && transformed.is_ident()) {
                 let v_cnt = *self.parent_visitor.v_count();
                 self.effect_builder.add_data(

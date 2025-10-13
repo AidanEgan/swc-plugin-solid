@@ -1,6 +1,7 @@
 use super::super::parser_types::{JsxOpeningMetadata, JsxTemplateKind, PossiblePlaceholders};
 use crate::builder::client::builder_helpers::own_box_expr;
 use crate::builder::parser_types::{JsxCustomComponentMetadata, JsxFragmentMetadata};
+use crate::constants::properties::is_self_closing;
 use crate::constants::svg::is_svg_element_name;
 use crate::helpers::component_helpers::{get_component_name, is_ce, is_solid_component};
 use crate::helpers::opening_element_helpers::parse_attrs;
@@ -40,10 +41,14 @@ impl VisitMut for ClientJsxElementVisitor {
         let children = node
             .children
             .drain(..)
-            .map(|mut child| {
+            .filter_map(|mut child| {
                 let mut new_visitor = ClientJsxElementVisitor::new();
                 child.visit_mut_with(&mut new_visitor);
-                new_visitor
+                if new_visitor.template.is_empty() && new_visitor.placeholders.is_empty() {
+                    None
+                } else {
+                    Some(new_visitor)
+                }
             })
             .collect();
         self.template
@@ -80,7 +85,10 @@ impl VisitMut for ClientJsxElementVisitor {
                 .push(Some(PossiblePlaceholders::Component(custom_component)));
             self.placeholder_count += 1;
         } else {
-            let close = if node.opening.self_closing {
+            let implicit_self_close = is_self_closing(name.as_str());
+            // HTML Tags that are always self closing will implicitly be closed
+            // by the framework. We don't need to add an explicit closing tag.
+            let close = if node.opening.self_closing && !implicit_self_close {
                 Some(JsxTemplateKind::Closing(name.clone()))
             } else {
                 None
@@ -95,12 +103,14 @@ impl VisitMut for ClientJsxElementVisitor {
                 has_spread,
                 is_ce,
                 is_svg,
+                implicit_self_close,
             };
             self.template.push(JsxTemplateKind::Opening(opening));
             if let Some(close) = close {
                 self.template.push(close);
             }
             node.children.visit_mut_with(self);
+            node.closing.visit_mut_with(self);
         }
     }
 
@@ -133,7 +143,14 @@ impl VisitMut for ClientJsxElementVisitor {
     }
 
     fn visit_mut_jsx_text(&mut self, node: &mut swc_core::ecma::ast::JSXText) {
-        // POSSIBLE OPTIMIZATION: Could just 'trim' the string and omit empty JSX Text values?
+        /*
+         * This is a bit of an open question for me. In theory, there should be no
+         * rendering difference between `<div> Hello World </div>` and `<div>Hello World</div>`
+         * So I could just optimize out the whitespace.
+         * This differs from the existing implementation however, so there could be subtle differences.
+         * In the case a user NEEDS whitespace they could do `{" "}` to guarantee it. That would
+         * render a placeholder with a space as it's value. Which would add the space to the template
+         */
         let trimmed = node.value.trim();
         if !trimmed.is_empty() {
             // Get rid of newlines because they will be a problem for the template

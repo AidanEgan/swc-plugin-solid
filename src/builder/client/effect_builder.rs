@@ -3,15 +3,15 @@ use swc_core::{
     common::{SyntaxContext, DUMMY_SP},
     ecma::ast::{
         BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Decl, Expr, ExprStmt, Ident,
-        KeyValueProp, MemberExpr, MemberProp, ObjectLit, Pat, Prop, PropName, PropOrSpread, Stmt,
-        VarDecl, VarDeclKind, VarDeclarator,
+        KeyValueProp, MemberExpr, MemberProp, ObjectLit, ParenExpr, Pat, Prop, PropName,
+        PropOrSpread, ReturnStmt, Stmt, VarDecl, VarDeclKind, VarDeclarator,
     },
 };
 
 use crate::{
     builder::client::builder_helpers::{wrap_in_arrow, wrap_in_empty_arrow},
     helpers::{
-        common_into_expressions::{ident_callee, ident_expr},
+        common_into_expressions::{ident_callee, ident_expr, ident_name},
         generate_var_names::{generate_effect, generate_effect_arg, generate_v},
     },
 };
@@ -20,6 +20,7 @@ use crate::{
 pub enum EffectVariant {
     Prop,
     Class,
+    ClassName,
     ClassList(bool), // Determines if _$className or el.classname.toggle is used
     Style(Option<PropName>), // Determines which style js fn to use
     Std(bool),       // true = setBooleanAttr, false = setAttr
@@ -37,17 +38,16 @@ pub struct EffectMetadata {
 
 #[derive(Debug)]
 pub struct EffectBuilder {
-    arrow_expr_args: Vec<Atom>,
     vars: VarDecl,
     pub data: Vec<EffectMetadata>,
+    pub isolated_effects: Vec<EffectMetadata>,
     obj_props: Vec<Atom>,
-    uses_arg: bool,
+    uses_effect_arg: bool,
 }
 
 impl EffectBuilder {
     pub fn new() -> Self {
         Self {
-            arrow_expr_args: vec![],
             vars: VarDecl {
                 span: DUMMY_SP,
                 ctxt: SyntaxContext::empty(),
@@ -57,7 +57,8 @@ impl EffectBuilder {
             },
             data: vec![],
             obj_props: vec![],
-            uses_arg: false,
+            isolated_effects: vec![],
+            uses_effect_arg: false,
         }
     }
 
@@ -76,20 +77,26 @@ impl EffectBuilder {
         as_atom
     }
 
-    pub fn get_new_obj(&mut self) -> MemberExpr {
+    pub fn get_effect_arg(&mut self) -> Atom {
         let effect_arg = generate_effect_arg();
-        if !self.arrow_expr_args.contains(&effect_arg) {
-            self.arrow_expr_args.push(effect_arg.clone());
-        }
+        self.uses_effect_arg = true;
+        effect_arg
+    }
+
+    pub fn set_uses_effect(&mut self, new_val: bool) -> bool {
+        let old = self.uses_effect_arg;
+        self.uses_effect_arg = new_val;
+        old
+    }
+
+    pub fn get_new_obj(&mut self) -> MemberExpr {
+        // 'Uses effect arg will be implicit'
+        let effect_arg = generate_effect_arg();
         MemberExpr {
             span: DUMMY_SP,
             obj: ident_expr(effect_arg),
             prop: MemberProp::Ident(self.get_new_obj_prop().into()),
         }
-    }
-
-    pub fn set_uses_arg(&mut self, uses: bool) {
-        self.uses_arg = uses;
     }
 
     pub fn add_data(
@@ -111,12 +118,12 @@ impl EffectBuilder {
         });
     }
 
-    pub fn add_var_decl(&mut self, name: Atom, value: Option<Box<Expr>>) {
+    pub fn add_var_decl(&mut self, id: Ident, value: Option<Box<Expr>>) {
         self.vars.decls.push(VarDeclarator {
             span: DUMMY_SP,
             name: Pat::Ident(BindingIdent {
                 // Don't HAVE to clone, but probs cheaper
-                id: name.into(),
+                id,
                 type_ann: None,
             }),
             init: value,
@@ -130,6 +137,8 @@ impl EffectBuilder {
         if stmts.len() == 1 {
             let only_stmt = stmts.pop()?;
             if let Stmt::Expr(inner_expr) = only_stmt {
+                /*
+                 * Why did I do this? Am I missing some case?
                 let expr = if inner_expr.expr.is_paren()
                     && inner_expr.expr.as_paren().unwrap().expr.is_assign()
                 {
@@ -137,12 +146,23 @@ impl EffectBuilder {
                 } else {
                     inner_expr.expr
                 };
-                let box_e: Box<Expr> = if !self.uses_arg {
+                */
+                // Swc may remove parens if not needed
+                let expr = if inner_expr.expr.is_paren() {
+                    inner_expr.expr
+                } else {
+                    Expr::Paren(ParenExpr {
+                        span: DUMMY_SP,
+                        expr: inner_expr.expr,
+                    })
+                    .into()
+                };
+                let box_e: Box<Expr> = if !self.uses_effect_arg {
                     wrap_in_empty_arrow(BlockStmtOrExpr::Expr(expr).into()).into()
                 } else {
                     wrap_in_arrow(
                         BlockStmtOrExpr::Expr(expr).into(),
-                        vec![Pat::Ident(generate_effect_arg().into())],
+                        vec![Pat::Ident(ident_name(generate_effect_arg(), false).into())],
                     )
                     .into()
                 };
@@ -165,6 +185,11 @@ impl EffectBuilder {
             let mut final_stmts =
                 vec![Stmt::Decl(Decl::Var(std::mem::take(&mut self.vars).into()))];
             final_stmts.extend(stmts);
+            //return _p$;
+            final_stmts.push(Stmt::Return(ReturnStmt {
+                span: DUMMY_SP,
+                arg: Some(ident_expr(generate_effect_arg())),
+            }));
             let inner_arr: Box<Expr> = wrap_in_arrow(
                 BlockStmtOrExpr::BlockStmt(BlockStmt {
                     span: DUMMY_SP,
@@ -172,10 +197,7 @@ impl EffectBuilder {
                     stmts: final_stmts,
                 })
                 .into(),
-                self.arrow_expr_args
-                    .drain(..)
-                    .map(|p| Pat::Ident(p.into()))
-                    .collect(),
+                vec![Pat::Ident(ident_name(generate_effect_arg(), false).into())],
             )
             .into();
             let props: Box<Expr> = ObjectLit {

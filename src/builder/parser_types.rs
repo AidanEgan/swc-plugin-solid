@@ -12,6 +12,7 @@ pub struct JsxOpeningMetadata {
     pub is_ce: bool,
     pub is_svg: bool,
     pub has_children: bool,
+    pub implicit_self_close: bool,
 }
 
 impl JsxOpeningMetadata {
@@ -23,6 +24,7 @@ impl JsxOpeningMetadata {
             is_ce: false,
             is_svg: false,
             has_children: false,
+            implicit_self_close: false,
         }
     }
 }
