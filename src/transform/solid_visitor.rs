@@ -23,6 +23,7 @@ use swc_core::{
 pub struct TemplateMetaData {
     pub is_ce: bool,
     pub is_svg: bool,
+    pub is_import_node: bool,
 }
 
 pub struct SolidJsVisitor<C: Clone + Comments, S: SourceMapper> {
@@ -63,7 +64,13 @@ impl<C: Clone + Comments, S: SourceMapper> ParentVisitor for SolidJsVisitor<C, S
     fn get_is_hydratable(&self) -> bool {
         self.options.hydratable
     }
-    fn register_template(&mut self, template: &str, is_ce: bool, is_svg: bool) -> usize {
+    fn register_template(
+        &mut self,
+        template: &str,
+        is_ce: bool,
+        is_svg: bool,
+        is_import_node: bool,
+    ) -> usize {
         if let Some(id) = self.templates.get(template) {
             // Template already exists
             *id
@@ -72,8 +79,14 @@ impl<C: Clone + Comments, S: SourceMapper> ParentVisitor for SolidJsVisitor<C, S
             self.template_count += 1;
             self.templates
                 .insert(template.to_string(), self.template_count);
-            self.template_data
-                .insert(self.template_count, TemplateMetaData { is_ce, is_svg });
+            self.template_data.insert(
+                self.template_count,
+                TemplateMetaData {
+                    is_ce,
+                    is_svg,
+                    is_import_node,
+                },
+            );
             self.template_count
         }
     }
@@ -162,6 +175,10 @@ impl<C: Clone + Comments, S: SourceMapper> VisitMut for SolidJsVisitor<C, S> {
             self.options.module_name.clone(),
         );
         if has_templates {
+            println!(
+                "\nTemplate debugging: {0:?}\n\n{1:?}\n",
+                self.templates, self.template_data
+            );
             let decl = create_template_declarations(
                 &mut self.templates,
                 &mut self.template_data,

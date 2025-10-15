@@ -47,16 +47,16 @@ pub fn create_template_declarations(
     // 2 assumptions that should always be true:
     // 1 <= i <= num_templates && i is unique
     for (template, i) in templates.drain() {
-        let (is_ce, is_svg) = template_data
+        let (is_ce, is_svg, is_import_node) = template_data
             .get(&i)
-            .map(|d| (d.is_ce, d.is_svg))
-            .unwrap_or((false, false));
+            .map(|d| (d.is_ce, d.is_svg, d.is_import_node))
+            .unwrap_or((false, false, false));
         let mut args = vec![ExprOrSpread {
             spread: None,
             expr: Box::new(Expr::Lit(Lit::Str(template.into()))),
         }];
-        if is_ce || is_svg {
-            args.push(Expr::Lit(Lit::Bool(is_ce.into())).into());
+        if is_ce || is_svg || is_import_node {
+            args.push(Expr::Lit(Lit::Bool((is_ce || is_import_node).into())).into());
             args.push(Expr::Lit(Lit::Bool(is_svg.into())).into());
             // Is mathml
             // This is niche, and not even reflected in the fn types

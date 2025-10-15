@@ -11,6 +11,7 @@ pub struct JsxOpeningMetadata {
     pub has_spread: bool,
     pub is_ce: bool,
     pub is_svg: bool,
+    pub is_import_node: bool,
     pub has_children: bool,
     pub implicit_self_close: bool,
 }
@@ -23,6 +24,7 @@ impl JsxOpeningMetadata {
             has_spread: false,
             is_ce: false,
             is_svg: false,
+            is_import_node: false,
             has_children: false,
             implicit_self_close: false,
         }

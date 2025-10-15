@@ -158,6 +158,7 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
 
     let mut templ_ce = false;
     let mut templ_svg = false;
+    let mut templ_import_node = false;
     let mut templ_string = String::new();
     let mut closing_el_builder = String::new();
 
@@ -176,6 +177,7 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
                 let implicit_self_close = open.implicit_self_close;
                 templ_ce = templ_ce || open.is_ce;
                 templ_svg = templ_svg || open.is_svg;
+                templ_import_node = templ_import_node || open.is_import_node;
                 add_closes(&mut templ_string, &mut closing_el_builder);
 
                 let num_els = open.attrs.len();
@@ -318,7 +320,12 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
             }
         }
     }
-    let temp_id = parent_visitor.register_template(templ_string.as_str(), templ_ce, templ_svg);
+    let temp_id = parent_visitor.register_template(
+        templ_string.as_str(),
+        templ_ce,
+        templ_svg,
+        templ_import_node,
+    );
 
     if block_builder.last_used_decl.is_some() {
         insert_queue.drain_insert_queue(PossibleInsert::Undefined, block_builder.get_final_stmts());

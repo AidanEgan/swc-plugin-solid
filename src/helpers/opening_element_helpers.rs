@@ -5,9 +5,10 @@ use swc_core::{
 
 pub fn parse_attrs(
     opening_el: &mut JSXOpeningElement,
-) -> (Vec<(Option<Atom>, JSXAttrOrSpread)>, bool, bool) {
+) -> (Vec<(Option<Atom>, JSXAttrOrSpread)>, bool, bool, bool) {
     let mut has_spread = false;
     let mut has_is = false;
+    let mut has_loading_attr = false;
     let res = opening_el
         .attrs
         .drain(..)
@@ -22,6 +23,8 @@ pub fn parse_attrs(
                         JSXAttrName::Ident(i) => {
                             if i.sym.as_str() == "is" {
                                 has_is = true;
+                            } else if i.sym.as_str() == "loading" {
+                                has_loading_attr = true;
                             }
                             i.sym.clone()
                         }
@@ -37,5 +40,5 @@ pub fn parse_attrs(
             (name, attr_or_spread)
         })
         .collect();
-    (res, has_spread, has_is)
+    (res, has_spread, has_is, has_loading_attr)
 }

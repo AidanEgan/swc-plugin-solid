@@ -10,6 +10,7 @@ use crate::{
     },
     helpers::{
         common_into_expressions::{ident_callee, ident_expr},
+        component_helpers::is_falsy,
         generate_var_names::{generate_el, SET_ATTRIBUTE, SET_BOOLEAN_ATTRIBUTE},
     },
     transform::parent_visitor::ParentVisitor,
@@ -27,11 +28,28 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
             EffectOrInlineOrExpression::EffectRes((data, effect_vars)) => (data, Some(effect_vars)),
             EffectOrInlineOrExpression::ExpressionRes(data) => (data, None),
             EffectOrInlineOrExpression::InlineRes(ir) => {
-                self.direct_template_inserts
-                    .push((prop_name.as_str().into(), ir));
+                // Falsy bool omitted
+                let is_falsy_bool = is_bool_attr && (ir.is_empty() || ir == "0");
+                if !is_falsy_bool {
+                    self.direct_template_inserts.push((
+                        prop_name.as_str().into(),
+                        if is_bool_attr { "".to_string() } else { ir },
+                    ));
+                }
                 return;
             }
         };
+        // Check special can inline or omit
+        if is_bool_attr {
+            if is_falsy(&data) {
+                return;
+            }
+            if data.is_lit() {
+                self.direct_template_inserts
+                    .push((prop_name.as_str().into(), "".to_string()));
+                return;
+            }
+        }
         let callee = if is_bool_attr {
             SET_BOOLEAN_ATTRIBUTE
         } else {

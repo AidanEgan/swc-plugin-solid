@@ -3,7 +3,9 @@ use crate::builder::client::builder_helpers::own_box_expr;
 use crate::builder::parser_types::{JsxCustomComponentMetadata, JsxFragmentMetadata};
 use crate::constants::properties::is_self_closing;
 use crate::constants::svg::is_svg_element_name;
-use crate::helpers::component_helpers::{get_component_name, is_ce, is_solid_component};
+use crate::helpers::component_helpers::{
+    get_component_name, is_ce, is_import_node, is_solid_component,
+};
 use crate::helpers::opening_element_helpers::parse_attrs;
 use swc_core::ecma::ast::{Expr, JSXElement, JSXExpr, JSXFragment, Lit};
 use swc_core::ecma::visit::{VisitMut, VisitMutWith};
@@ -93,9 +95,11 @@ impl VisitMut for ClientJsxElementVisitor {
             } else {
                 None
             };
-            let (attrs, has_spread, has_is) = parse_attrs(&mut node.opening);
-            let is_svg = is_svg_element_name(name.as_str());
-            let is_ce = is_ce(name.as_str(), has_is);
+            let (attrs, has_spread, has_is, has_loading_attr) = parse_attrs(&mut node.opening);
+            let name_ref = name.as_str();
+            let is_svg = is_svg_element_name(name_ref);
+            let is_ce = is_ce(name_ref, has_is);
+            let is_import_node = is_import_node(name_ref, has_loading_attr);
             let opening = JsxOpeningMetadata {
                 has_children: !node.children.is_empty(),
                 value: name,
@@ -103,6 +107,7 @@ impl VisitMut for ClientJsxElementVisitor {
                 has_spread,
                 is_ce,
                 is_svg,
+                is_import_node,
                 implicit_self_close,
             };
             self.template.push(JsxTemplateKind::Opening(opening));

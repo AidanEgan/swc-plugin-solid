@@ -12,7 +12,7 @@ import { setStyleProperty as _$setStyleProperty } from "solid-js/web";
 import { spread as _$spread } from "solid-js/web";
 import { style as _$style } from "solid-js/web";
 import { use as _$use } from "solid-js/web";
-var _tmpl$1 = /*#__PURE__*/ _$template("<div id=main><h1 class=base id=my-h1><a href=/>Welcome"), _tmpl$2 = /*#__PURE__*/ _$template("<div><div></div> <div></div><div>"), _tmpl$3 = /*#__PURE__*/ _$template("<div foo>"), _tmpl$4 = /*#__PURE__*/ _$template("<div>"), _tmpl$5 = /*#__PURE__*/ _$template('<div class="a b">'), _tmpl$6 = /*#__PURE__*/ _$template("<div style=margin-right:40px>"), _tmpl$7 = /*#__PURE__*/ _$template("<div onclick=console.log('hi')>"), _tmpl$8 = /*#__PURE__*/ _$template("<input type=checkbox>"), _tmpl$9 = /*#__PURE__*/ _$template("<div class=`a>`$`"), _tmpl$10 = /*#__PURE__*/ _$template('<button type=button class="static hi">Write'), _tmpl$11 = /*#__PURE__*/ _$template('<button class="a b c">Hi'), _tmpl$12 = /*#__PURE__*/ _$template('<div class="bg-red-500 flex flex-col">'), _tmpl$13 = /*#__PURE__*/ _$template("<div><input readOnly><input>"), _tmpl$14 = /*#__PURE__*/ _$template('<div data="hi" data2=">'), _tmpl$15 = /*#__PURE__*/ _$template("<a>"), _tmpl$16 = /*#__PURE__*/ _$template("<div><a>"), _tmpl$17 = /*#__PURE__*/ _$template("<div start=Hi>Hi"), _tmpl$18 = /*#__PURE__*/ _$template("<label><span>Input is</span><input><div>"), _tmpl$19 = /*#__PURE__*/ _$template('<div style="color: red;\n    background-color: blue !important;\n    border: 1px solid black;\n    font-size: 12px;" random="random1 random2\n    random3 random4" class="class1 class2\n    class3 class4\n    class5 class6">'), _tmpl$20 = /*#__PURE__*/ _$template("<button>"), _tmpl$21 = /*#__PURE__*/ _$template("<input value=10>"), _tmpl$22 = /*#__PURE__*/ _$template("<select><option>Red</option><option>Blue"), _tmpl$23 = /*#__PURE__*/ _$template("<div quack>empty string"), _tmpl$24 = /*#__PURE__*/ _$template("<div quack>js empty"), _tmpl$25 = /*#__PURE__*/ _$template("<div quack=hola>hola"), _tmpl$26 = /*#__PURE__*/ _$template('<div quack="hola js">"hola js"'), _tmpl$27 = /*#__PURE__*/ _$template("<div>true"), _tmpl$28 = /*#__PURE__*/ _$template("<div>false"), _tmpl$29 = /*#__PURE__*/ _$template("<div quack=1>1"), _tmpl$30 = /*#__PURE__*/ _$template("<div quack=0>0"), _tmpl$31 = /*#__PURE__*/ _$template('<div quack=1>"1"'), _tmpl$32 = /*#__PURE__*/ _$template('<div quack=0>"0"'), _tmpl$33 = /*#__PURE__*/ _$template("<div>undefined"), _tmpl$34 = /*#__PURE__*/ _$template("<div>null"), _tmpl$35 = /*#__PURE__*/ _$template("<div>boolTest()"), _tmpl$36 = /*#__PURE__*/ _$template("<div>boolTest"), _tmpl$37 = /*#__PURE__*/ _$template("<div>boolTestBinding"), _tmpl$38 = /*#__PURE__*/ _$template("<div>boolTestObjBinding.value"), _tmpl$39 = /*#__PURE__*/ _$template("<div>fn"), _tmpl$40 = /*#__PURE__*/ _$template("<div before quack=true>should have space before"), _tmpl$41 = /*#__PURE__*/ _$template("<div before quack=true after>should have space before/after"), _tmpl$42 = /*#__PURE__*/ _$template("<div quack=true after>should have space before/after"), _tmpl$43 = /*#__PURE__*/ _$template("<img src>"), _tmpl$44 = /*#__PURE__*/ _$template("<div><img src>"), _tmpl$45 = /*#__PURE__*/ _$template("<img src loading=lazy>"), _tmpl$46 = /*#__PURE__*/ _$template("<div><img src loading=lazy>"), _tmpl$47 = /*#__PURE__*/ _$template("<iframe src>"), _tmpl$48 = /*#__PURE__*/ _$template("<div><iframe src>"), _tmpl$49 = /*#__PURE__*/ _$template("<iframe src loading=lazy>"), _tmpl$50 = /*#__PURE__*/ _$template("<div><iframe src loading=lazy>"), _tmpl$51 = /*#__PURE__*/ _$template("<div title=<u>data</u>>"), _tmpl$52 = /*#__PURE__*/ _$template("<div truestr=true truestrjs=true>"), _tmpl$53 = /*#__PURE__*/ _$template("<div falsestr=false falsestrjs=false>"), _tmpl$54 = /*#__PURE__*/ _$template("<math display=block><mrow>"), _tmpl$55 = /*#__PURE__*/ _$template("<mrow><mi>x</mi><mo>="), _tmpl$56 = /*#__PURE__*/ _$template("<div style=background:red>"), _tmpl$57 = /*#__PURE__*/ _$template("<div style=background:red;color:green;margin:3;padding:0.4>"), _tmpl$58 = /*#__PURE__*/ _$template("<div style=background:red;color:green>");
+var _tmpl$1 = /*#__PURE__*/ _$template("<div id=main><h1 class=base id=my-h1><a href=/>Welcome"), _tmpl$2 = /*#__PURE__*/ _$template("<div><div></div> <div></div><div>"), _tmpl$3 = /*#__PURE__*/ _$template("<div foo>"), _tmpl$4 = /*#__PURE__*/ _$template("<div>"), _tmpl$5 = /*#__PURE__*/ _$template('<div class="a b">'), _tmpl$6 = /*#__PURE__*/ _$template("<div style=margin-right:40px>"), _tmpl$7 = /*#__PURE__*/ _$template("<div onclick=console.log('hi')>"), _tmpl$8 = /*#__PURE__*/ _$template("<input type=checkbox>"), _tmpl$9 = /*#__PURE__*/ _$template("<div class=`a>`$`"), _tmpl$10 = /*#__PURE__*/ _$template('<button type=button class="static hi">Write'), _tmpl$11 = /*#__PURE__*/ _$template('<button class="a b c">Hi'), _tmpl$12 = /*#__PURE__*/ _$template('<div class="bg-red-500 flex flex-col">'), _tmpl$13 = /*#__PURE__*/ _$template("<div><input readOnly><input>"), _tmpl$14 = /*#__PURE__*/ _$template('<div data="hi" data2=">'), _tmpl$15 = /*#__PURE__*/ _$template("<a>"), _tmpl$16 = /*#__PURE__*/ _$template("<div><a>"), _tmpl$17 = /*#__PURE__*/ _$template("<div start=Hi>Hi"), _tmpl$18 = /*#__PURE__*/ _$template("<label><span>Input is</span><input><div>"), _tmpl$19 = /*#__PURE__*/ _$template('<div style="color: red;\n    background-color: blue !important;\n    border: 1px solid black;\n    font-size: 12px;" random="random1 random2\n    random3 random4" class="class1 class2\n    class3 class4\n    class5 class6">'), _tmpl$20 = /*#__PURE__*/ _$template("<button>"), _tmpl$21 = /*#__PURE__*/ _$template("<input value=10>"), _tmpl$22 = /*#__PURE__*/ _$template("<select><option>Red</option><option>Blue"), _tmpl$23 = /*#__PURE__*/ _$template("<div>empty string"), _tmpl$24 = /*#__PURE__*/ _$template("<div>js empty"), _tmpl$25 = /*#__PURE__*/ _$template("<div quack>hola"), _tmpl$26 = /*#__PURE__*/ _$template('<div quack>"hola js"'), _tmpl$27 = /*#__PURE__*/ _$template("<div quack>true"), _tmpl$28 = /*#__PURE__*/ _$template("<div>false"), _tmpl$29 = /*#__PURE__*/ _$template("<div quack>1"), _tmpl$30 = /*#__PURE__*/ _$template("<div>0"), _tmpl$31 = /*#__PURE__*/ _$template('<div quack>"1"'), _tmpl$32 = /*#__PURE__*/ _$template('<div>"0"'), _tmpl$33 = /*#__PURE__*/ _$template("<div>undefined"), _tmpl$34 = /*#__PURE__*/ _$template("<div>null"), _tmpl$35 = /*#__PURE__*/ _$template("<div>boolTest()"), _tmpl$36 = /*#__PURE__*/ _$template("<div>boolTest"), _tmpl$37 = /*#__PURE__*/ _$template("<div>boolTestBinding"), _tmpl$38 = /*#__PURE__*/ _$template("<div>boolTestObjBinding.value"), _tmpl$39 = /*#__PURE__*/ _$template("<div>fn"), _tmpl$40 = /*#__PURE__*/ _$template("<div before quack>should have space before"), _tmpl$41 = /*#__PURE__*/ _$template("<div before quack after>should have space before/after"), _tmpl$42 = /*#__PURE__*/ _$template("<div quack after>should have space before/after"), _tmpl$43 = /*#__PURE__*/ _$template("<img src>"), _tmpl$44 = /*#__PURE__*/ _$template("<div><img src>"), _tmpl$45 = /*#__PURE__*/ _$template("<img src loading=lazy>", true, false, false), _tmpl$46 = /*#__PURE__*/ _$template("<div><img src loading=lazy>", true, false, false), _tmpl$47 = /*#__PURE__*/ _$template("<iframe src>"), _tmpl$48 = /*#__PURE__*/ _$template("<div><iframe src>"), _tmpl$49 = /*#__PURE__*/ _$template("<iframe src loading=lazy>", true, false, false), _tmpl$50 = /*#__PURE__*/ _$template("<div><iframe src loading=lazy>", true, false, false), _tmpl$51 = /*#__PURE__*/ _$template("<div title=<u>data</u>>"), _tmpl$52 = /*#__PURE__*/ _$template("<div truestr=true truestrjs=true>"), _tmpl$53 = /*#__PURE__*/ _$template("<div falsestr=false falsestrjs=false>"), _tmpl$54 = /*#__PURE__*/ _$template("<math display=block><mrow>"), _tmpl$55 = /*#__PURE__*/ _$template("<mrow><mi>x</mi><mo>="), _tmpl$56 = /*#__PURE__*/ _$template("<div style=background:red>"), _tmpl$57 = /*#__PURE__*/ _$template("<div style=background:red;color:green;margin:3;padding:0.4>"), _tmpl$58 = /*#__PURE__*/ _$template("<div style=background:red;color:green>");
 import * as styles from "./styles.module.css";
 import { binding } from "somewhere";
 function refFn() {}
@@ -331,30 +331,14 @@ const template42 = _tmpl$23();
 const template43 = _tmpl$24();
 const template44 = _tmpl$25();
 const template45 = _tmpl$26();
-const template46 = (()=>{
-    var _el$75 = _tmpl$27();
-    _$setBoolAttribute(_el$75, "quack", true);
-    return _el$75;
-})();
-const template47 = (()=>{
-    var _el$77 = _tmpl$28();
-    _$setBoolAttribute(_el$77, "quack", false);
-    return _el$77;
-})();
+const template46 = _tmpl$27();
+const template47 = _tmpl$28();
 const template48 = _tmpl$29();
 const template49 = _tmpl$30();
 const template50 = _tmpl$31();
 const template51 = _tmpl$32();
-const template52 = (()=>{
-    var _el$87 = _tmpl$33();
-    _$setBoolAttribute(_el$87, "quack", undefined);
-    return _el$87;
-})();
-const template53 = (()=>{
-    var _el$89 = _tmpl$34();
-    _$setBoolAttribute(_el$89, "quack", null);
-    return _el$89;
-})();
+const template52 = _tmpl$33();
+const template53 = _tmpl$34();
 const template54 = (()=>{
     var _el$91 = _tmpl$35();
     _$effect(()=>_$setBoolAttribute(_el$91, "quack", boolTest()));
@@ -377,7 +361,7 @@ const template57 = (()=>{
 })();
 const template58 = (()=>{
     var _el$99 = _tmpl$39();
-    _$effect(()=>_$setBoolAttribute(_el$99, "quack", ()=>false));
+    _$setBoolAttribute(_el$99, "quack", ()=>false);
     return _el$99;
 })();
 const template59 = _tmpl$40();

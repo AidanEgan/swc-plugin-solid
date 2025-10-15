@@ -46,6 +46,12 @@ pub fn is_ce(name: &str, has_is: bool) -> bool {
     has_is || name.contains("-")
 }
 
+// Check if this is an 'import node'
+// Defined as an iframe/img that has a 'loading' attr
+pub fn is_import_node(name: &str, has_loading_attr: bool) -> bool {
+    has_loading_attr && (name == "img" || name == "iframe")
+}
+
 // Checks if an element in undefined
 pub fn is_undefined(expr: &Box<Expr>) -> bool {
     if let Some(ident) = expr.as_ident() {

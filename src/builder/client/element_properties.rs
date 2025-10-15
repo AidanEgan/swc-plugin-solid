@@ -620,6 +620,10 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                             None
                         },
                     );
+                    // Idk why this is an exception
+                    if is_bool && expr.is_arrow() {
+                        self.tmp_wrap_effect = false;
+                    }
                     self.wrap_effect(
                         expr,
                         element_count,
