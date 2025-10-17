@@ -125,57 +125,57 @@ mod tests {
         );
         basic_test(input.as_str(), output.as_str(), is_ts);
     }
-    /*
-        #[test]
-        fn basic_template_test_js() {
-            basic_test("tests/basic/input.jsx", "tests/basic/output.js", false);
-        }
 
-        #[test]
-        fn basic_template_test_ts() {
-            basic_test("tests/basic/input.tsx", "tests/basic/output.ts", true);
-        }
+    #[test]
+    fn basic_template_test_js() {
+        basic_test("tests/basic/input.jsx", "tests/basic/output.js", false);
+    }
 
-        #[test]
-        fn basic_custom_component() {
-            std_format_test("basic", "custom.jsx");
-        }
+    #[test]
+    fn basic_template_test_ts() {
+        basic_test("tests/basic/input.tsx", "tests/basic/output.ts", true);
+    }
 
-        #[test]
-        fn complex_custom_component() {
-            std_format_test("basic", "custom_complex.jsx");
-        }
+    #[test]
+    fn basic_custom_component() {
+        std_format_test("basic", "custom.jsx");
+    }
 
-        #[test]
-        fn hello_world_component() {
-            std_format_test("components", "hello_world.tsx");
-        }
+    #[test]
+    fn complex_custom_component() {
+        std_format_test("basic", "custom_complex.jsx");
+    }
 
-        #[test]
-        fn hello_world_component_variant_one() {
-            std_format_test("components", "hello_world_variant_one.tsx");
-        }
+    #[test]
+    fn hello_world_component() {
+        std_format_test("components", "hello_world.tsx");
+    }
 
-        #[test]
-        fn basic_ref_test() {
-            std_format_test("components", "with_ref.tsx");
-        }
+    #[test]
+    fn hello_world_component_variant_one() {
+        std_format_test("components", "hello_world_variant_one.tsx");
+    }
 
-        #[test]
-        fn class_test() {
-            std_format_test("components", "class_name_test.tsx");
-        }
+    #[test]
+    fn basic_ref_test() {
+        std_format_test("components", "with_ref.tsx");
+    }
 
-        #[test]
-        fn style_test() {
-            std_format_test("basic", "style.jsx");
-        }
+    #[test]
+    fn class_test() {
+        std_format_test("components", "class_name_test.tsx");
+    }
 
-        #[test]
-        fn class_list_test() {
-            std_format_test("components", "class_list_test.tsx");
-        }
-    */
+    #[test]
+    fn style_test() {
+        std_format_test("basic", "style.jsx");
+    }
+
+    #[test]
+    fn class_list_test() {
+        std_format_test("components", "class_list_test.tsx");
+    }
+
     #[test]
     fn attribute_expressions_test() {
         std_format_test("attribute_expressions", "code.jsx");
