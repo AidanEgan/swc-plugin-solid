@@ -13,7 +13,7 @@ use crate::{
         common_into_expressions::{ident_callee, ident_expr, ident_name},
         generate_var_names::{generate_el, generate_ref, USE},
     },
-    transform::parent_visitor::ParentVisitor,
+    transform::{parent_visitor::ParentVisitor, scope_manager::TrackedVariable},
 };
 
 fn can_assign(expr: Box<Expr>) -> Option<AssignTarget> {
@@ -31,7 +31,7 @@ pub fn create_ref_statements(
     local_ref_count: &mut usize,
     element_count: Option<usize>,
     ref_expr: Box<Expr>,
-    is_const: bool,
+    should_use_use: bool,
 ) -> (Option<Box<Expr>>, bool) {
     /*
      * Custom
@@ -51,7 +51,7 @@ pub fn create_ref_statements(
     let mut import_use = false;
 
     // As fn
-    if is_const || ref_expr.is_arrow() || ref_expr.is_fn_expr() {
+    if should_use_use || ref_expr.is_arrow() || ref_expr.is_fn_expr() {
         if element_count.is_none() {
             // Terminate early for custom component
             return (Some(ref_expr), import_use);
@@ -156,7 +156,7 @@ pub fn create_ref_statements(
 
 impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
     pub fn ref_builder(&mut self, element_count: Option<usize>, ref_expr: Box<Expr>) {
-        let mut is_const = false;
+        let mut should_use_use = false;
         // Can be inlined
         if element_count.is_some() {
             if let Some(n) = ref_expr.as_ident() {
@@ -165,8 +165,16 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                         self.direct_template_inserts.push(("ref".into(), val));
                         return;
                     }
-                    Err(tracked_is_const) => {
-                        is_const = tracked_is_const;
+                    Err(reason) => {
+                        match reason {
+                            Some(TrackedVariable::StoredConstant) => {
+                                should_use_use = true;
+                            }
+                            Some(TrackedVariable::Imported) => {
+                                should_use_use = true;
+                            }
+                            _ => { /* Skip */ }
+                        }
                     }
                 }
             }
@@ -176,7 +184,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
             self.parent_visitor.ref_count(),
             element_count,
             ref_expr,
-            is_const,
+            should_use_use,
         );
         if used_use {
             self.parent_visitor.add_import(USE.into());

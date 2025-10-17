@@ -47,21 +47,18 @@ pub fn create_template_declarations(
     // 2 assumptions that should always be true:
     // 1 <= i <= num_templates && i is unique
     for (template, i) in templates.drain() {
-        let (is_ce, is_svg, is_import_node) = template_data
+        let (is_ce, is_svg, is_import_node, is_mathml) = template_data
             .get(&i)
-            .map(|d| (d.is_ce, d.is_svg, d.is_import_node))
-            .unwrap_or((false, false, false));
+            .map(|d| (d.is_ce, d.is_svg, d.is_import_node, d.is_mathml))
+            .unwrap_or((false, false, false, false));
         let mut args = vec![ExprOrSpread {
             spread: None,
             expr: Box::new(Expr::Lit(Lit::Str(template.into()))),
         }];
-        if is_ce || is_svg || is_import_node {
+        if is_ce || is_svg || is_import_node || is_mathml {
             args.push(Expr::Lit(Lit::Bool((is_ce || is_import_node).into())).into());
             args.push(Expr::Lit(Lit::Bool(is_svg.into())).into());
-            // Is mathml
-            // This is niche, and not even reflected in the fn types
-            // I assume it's not really used
-            args.push(Expr::Lit(Lit::Bool(false.into())).into());
+            args.push(Expr::Lit(Lit::Bool(is_mathml.into())).into());
         }
 
         decls[i - 1].name.as_mut_ident().unwrap().id.sym = generate_template_name(i);

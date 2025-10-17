@@ -107,7 +107,6 @@ fn handle_fragment_chunks<T: ParentVisitor>(
     mut frag: JsxFragmentMetadata<ClientJsxElementVisitor>,
     parent_visitor: &mut T,
 ) -> BuildResults {
-    println!("\nBuilding: {:?}\n", frag);
     if frag.children.len() == 1 {
         let mut build_res = build_js_from_client_jsx(frag.children.remove(0), parent_visitor);
         memo_call_expr_mut(&mut build_res);
@@ -159,6 +158,8 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
     let mut templ_ce = false;
     let mut templ_svg = false;
     let mut templ_import_node = false;
+    let mut templ_mathml = false;
+
     let mut templ_string = String::new();
     let mut closing_el_builder = String::new();
 
@@ -178,6 +179,7 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
                 templ_ce = templ_ce || open.is_ce;
                 templ_svg = templ_svg || open.is_svg;
                 templ_import_node = templ_import_node || open.is_import_node;
+                templ_mathml = templ_mathml || open.is_mathml;
                 add_closes(&mut templ_string, &mut closing_el_builder);
 
                 let num_els = open.attrs.len();
@@ -325,6 +327,7 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
         templ_ce,
         templ_svg,
         templ_import_node,
+        templ_mathml,
     );
 
     if block_builder.last_used_decl.is_some() {

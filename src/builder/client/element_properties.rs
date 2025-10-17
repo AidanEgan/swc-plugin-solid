@@ -120,17 +120,25 @@ pub struct ElementPropertiesBuilder<'a, T: ParentVisitor> {
 // Implements many fns for different types of properties
 // See 'element properties' folder
 impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
-    fn check_class_name_in_scope(&mut self, initial_val: &Atom) -> Result<String, bool> {
+    fn check_class_name_in_scope(
+        &mut self,
+        initial_val: &Atom,
+    ) -> Result<String, Option<TrackedVariable>> {
         let mut val = initial_val;
         loop {
             match self.parent_visitor.get_var_if_in_scope(val) {
-                Some(TrackedVariable::FunctionIdent(is_const)) => break Err(*is_const),
+                Some(TrackedVariable::FunctionIdent(is_const)) => {
+                    break Err(Some(TrackedVariable::FunctionIdent(*is_const)))
+                }
                 Some(TrackedVariable::Literal(l)) => break Ok(l.clone()),
                 Some(TrackedVariable::Referred(r)) => {
                     val = r;
                 }
-                Some(TrackedVariable::StoredConstant) => break Err(true),
-                None => break Err(false),
+                Some(TrackedVariable::StoredConstant) => {
+                    break Err(Some(TrackedVariable::StoredConstant))
+                }
+                Some(TrackedVariable::Imported) => break Err(Some(TrackedVariable::Imported)),
+                None => break Err(None),
             }
         }
     }

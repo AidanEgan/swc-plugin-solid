@@ -22,6 +22,7 @@ pub trait ParentVisitor {
         is_ce: bool,
         is_svg: bool,
         is_import_node: bool,
+        is_mathml: bool,
     ) -> usize;
     fn register_event(&mut self, event: Cow<str>);
     fn add_import(&mut self, import_name: Cow<str>);

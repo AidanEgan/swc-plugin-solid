@@ -1,6 +1,7 @@
 use super::super::parser_types::{JsxOpeningMetadata, JsxTemplateKind, PossiblePlaceholders};
 use crate::builder::client::builder_helpers::own_box_expr;
 use crate::builder::parser_types::{JsxCustomComponentMetadata, JsxFragmentMetadata};
+use crate::constants::mathml::is_mathml_element;
 use crate::constants::properties::is_self_closing;
 use crate::constants::svg::is_svg_element_name;
 use crate::helpers::component_helpers::{
@@ -99,6 +100,7 @@ impl VisitMut for ClientJsxElementVisitor {
             let name_ref = name.as_str();
             let is_svg = is_svg_element_name(name_ref);
             let is_ce = is_ce(name_ref, has_is);
+            let is_mathml = is_mathml_element(name_ref);
             let is_import_node = is_import_node(name_ref, has_loading_attr);
             let opening = JsxOpeningMetadata {
                 has_children: !node.children.is_empty(),
@@ -108,6 +110,7 @@ impl VisitMut for ClientJsxElementVisitor {
                 is_ce,
                 is_svg,
                 is_import_node,
+                is_mathml,
                 implicit_self_close,
             };
             self.template.push(JsxTemplateKind::Opening(opening));

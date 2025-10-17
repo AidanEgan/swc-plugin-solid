@@ -7,8 +7,6 @@ use crate::transform::scope_manager::{ScopeManager, TrackedVariable};
 use crate::{config::PluginArgs, helpers::should_skip::should_skip};
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
-use swc_core::common::comments::Comment;
-use swc_core::common::source_map::SmallPos;
 use swc_core::common::{BytePos, Spanned};
 use swc_core::ecma::ast::{
     BlockStmt, Decl, FnDecl, Function, ModuleItem, Program, Stmt, VarDecl, VarDeclKind,
@@ -24,6 +22,7 @@ pub struct TemplateMetaData {
     pub is_ce: bool,
     pub is_svg: bool,
     pub is_import_node: bool,
+    pub is_mathml: bool,
 }
 
 pub struct SolidJsVisitor<C: Clone + Comments, S: SourceMapper> {
@@ -70,6 +69,7 @@ impl<C: Clone + Comments, S: SourceMapper> ParentVisitor for SolidJsVisitor<C, S
         is_ce: bool,
         is_svg: bool,
         is_import_node: bool,
+        is_mathml: bool,
     ) -> usize {
         if let Some(id) = self.templates.get(template) {
             // Template already exists
@@ -85,6 +85,7 @@ impl<C: Clone + Comments, S: SourceMapper> ParentVisitor for SolidJsVisitor<C, S
                     is_ce,
                     is_svg,
                     is_import_node,
+                    is_mathml,
                 },
             );
             self.template_count
@@ -175,10 +176,6 @@ impl<C: Clone + Comments, S: SourceMapper> VisitMut for SolidJsVisitor<C, S> {
             self.options.module_name.clone(),
         );
         if has_templates {
-            println!(
-                "\nTemplate debugging: {0:?}\n\n{1:?}\n",
-                self.templates, self.template_data
-            );
             let decl = create_template_declarations(
                 &mut self.templates,
                 &mut self.template_data,
@@ -212,6 +209,28 @@ impl<C: Clone + Comments, S: SourceMapper> VisitMut for SolidJsVisitor<C, S> {
     }
 
     // Scope manager - a few places need to have context about vars
+
+    fn visit_mut_import_decl(&mut self, node: &mut swc_core::ecma::ast::ImportDecl) {
+        for specifier in node.specifiers.iter() {
+            let name = match specifier {
+                swc_core::ecma::ast::ImportSpecifier::Named(import_named_specifier) => {
+                    if !import_named_specifier.is_type_only {
+                        Some(import_named_specifier.local.sym.clone())
+                    } else {
+                        None
+                    }
+                }
+                swc_core::ecma::ast::ImportSpecifier::Default(import_default_specifier) => {
+                    Some(import_default_specifier.local.sym.clone())
+                }
+                swc_core::ecma::ast::ImportSpecifier::Namespace(_) => None, /* Ignored for now */
+            };
+            if let Some(name) = name {
+                self.scope_manager.track_import(name);
+            }
+        }
+        node.visit_mut_children_with(self);
+    }
 
     fn visit_mut_var_decl(&mut self, n: &mut VarDecl) {
         let is_const = n.kind == VarDeclKind::Const;

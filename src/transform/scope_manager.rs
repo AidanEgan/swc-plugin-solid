@@ -11,8 +11,10 @@ pub enum TrackedVariable {
     FunctionIdent(bool), // Variable used to initialize a fn. Used for delegated events
     Referred(Atom),      // Re-assigns an already tracked var
     StoredConstant,      // Refs track 'const' vars
+    Imported,
 }
 
+#[derive(Debug)]
 pub struct ScopeManager {
     scopes: Vec<HashMap<Atom, TrackedVariable>>,
 }
@@ -55,6 +57,10 @@ impl ScopeManager {
         None
     }
 
+    pub fn track_import(&mut self, import_name: Atom) {
+        self.declare_variable(import_name, TrackedVariable::Imported);
+    }
+
     pub fn add_var(&mut self, declarator: &VarDeclarator, is_const: bool) {
         if let Some(some_expr) = &declarator.init {
             match &declarator.name {
@@ -77,19 +83,30 @@ impl ScopeManager {
                     }
                     if let Some(lit) = some_expr.as_lit() {
                         match lit {
-                            Lit::Str(lit_str) => self.declare_variable(
-                                ident.sym.clone(),
-                                TrackedVariable::Literal(lit_str.value.to_string()),
-                            ),
-                            Lit::Num(lit_num) => self.declare_variable(
-                                ident.sym.clone(),
-                                TrackedVariable::Literal(lit_num.value.to_string()),
-                            ),
+                            Lit::Str(lit_str) => {
+                                self.declare_variable(
+                                    ident.sym.clone(),
+                                    TrackedVariable::Literal(lit_str.value.to_string()),
+                                );
+                                return;
+                            }
+                            Lit::Num(lit_num) => {
+                                self.declare_variable(
+                                    ident.sym.clone(),
+                                    TrackedVariable::Literal(lit_num.value.to_string()),
+                                );
+                                return;
+                            }
                             _ => { /* Skip */ }
                         }
-                        return;
                     }
-                    if is_const {
+                    // Not really intereseted in some of these
+                    if is_const
+                        && !(some_expr.is_arrow()
+                            || some_expr.is_call()
+                            || some_expr.is_jsx_element()
+                            || some_expr.is_jsx_fragment())
+                    {
                         self.declare_variable(ident.sym.clone(), TrackedVariable::StoredConstant);
                     }
                 }
