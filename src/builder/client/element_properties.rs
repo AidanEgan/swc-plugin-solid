@@ -221,7 +221,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                                 false, // Memo bin + cond only in custom compnents I think
                             );
                             if transform_call_exprs {
-                                sub_visitor.visit_and_wrap_outer_expr(&mut expr);
+                                sub_visitor.visit_and_wrap_outer_expr(&mut expr, true);
                             } else {
                                 expr.visit_mut_with(&mut sub_visitor);
                             }
@@ -851,7 +851,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                 if !self.parent_visitor.has_static_marker(lone_expr.span_lo()) {
                     let mut little_visitor =
                         ClientJsxExprTransformer::new(self.parent_visitor, true, false);
-                    little_visitor.visit_and_wrap_outer_expr(&mut lone_expr);
+                    little_visitor.visit_and_wrap_outer_expr(&mut lone_expr, true);
                     if little_visitor.should_wrap_in_effect {
                         self.parent_visitor
                             .add_import(generate_merge_props().as_str().into());

@@ -3,9 +3,9 @@ use swc_core::{
     common::{util::take::Take, SyntaxContext, DUMMY_SP},
     ecma::{
         ast::{
-            ArrayLit, BlockStmt, CallExpr, Expr, ExprOrSpread, Function, GetterProp, IdentName,
-            JSXAttrOrSpread, JSXAttrValue, JSXExpr, KeyValueProp, Lit, MethodProp, ObjectLit,
-            Param, Pat, Prop, PropName, PropOrSpread, ReturnStmt, Stmt,
+            ArrayLit, BlockStmt, CallExpr, ComputedPropName, Expr, ExprOrSpread, Function,
+            GetterProp, Ident, IdentName, JSXAttrOrSpread, JSXAttrValue, JSXExpr, KeyValueProp,
+            Lit, MethodProp, ObjectLit, Param, Pat, Prop, PropName, PropOrSpread, ReturnStmt, Stmt,
         },
         visit::VisitMutWith,
     },
@@ -24,7 +24,7 @@ use crate::{
         parser_types::JsxCustomComponentMetadata,
     },
     helpers::{
-        common_into_expressions::{ident_callee, ident_expr, ident_name},
+        common_into_expressions::{cannot_convert_to_ident, ident_callee, ident_expr, ident_name},
         generate_var_names::{
             generate_create_component_name, generate_merge_props, generate_ref_raw, REF_RAW,
         },
@@ -51,9 +51,10 @@ fn grab_inner_expr(raw: JSXAttrOrSpread) -> Box<Expr> {
 fn transform_inner_expression_mut<T: ParentVisitor>(
     parent_visitor: &mut T,
     to_visit: &mut Box<Expr>,
+    wrap_member_exprs: bool,
 ) {
     let mut attribute_visitor = ClientJsxExprTransformer::new(parent_visitor, true, true);
-    attribute_visitor.visit_and_wrap_outer_expr(to_visit);
+    attribute_visitor.visit_and_wrap_outer_expr(to_visit, wrap_member_exprs);
 }
 
 fn build_ref_expr(stmts: Vec<Stmt>) -> Prop {
@@ -82,11 +83,26 @@ fn build_ref_expr(stmts: Vec<Stmt>) -> Prop {
     Prop::Method(new_val)
 }
 
-fn build_props_oject_expr(props: Vec<(Atom, Box<Expr>)>) -> Box<Expr> {
+fn build_props_oject_expr<T: ParentVisitor>(
+    parent_visitor: &mut T,
+    props: Vec<(Atom, Box<Expr>)>,
+) -> Box<Expr> {
     let mut statements: Vec<Stmt> = vec![];
     let props = props
         .into_iter()
         .map(|(key, mut val)| {
+            // Apply correct transformation
+            match key.as_str() {
+                REF_RAW => {
+                    // Ref statements change a bit differently
+                    let mut attribute_visitor =
+                        ClientJsxExprTransformer::new(parent_visitor, false, false);
+                    val.visit_mut_with(&mut attribute_visitor);
+                }
+                "children" => { /* Intentionally do nothing */ }
+                // Standard expr transformation
+                _ => transform_inner_expression_mut(parent_visitor, &mut val, false),
+            }
             // Certain exprs need to be transformed
             if key.as_str() == REF_RAW {
                 // No transformation done, ownership of expr moves back here
@@ -99,14 +115,23 @@ fn build_props_oject_expr(props: Vec<(Atom, Box<Expr>)>) -> Box<Expr> {
                     return build_ref_expr(std::mem::take(&mut statements)).into();
                 }
             }
-            let key = PropName::Ident(IdentName {
-                span: DUMMY_SP,
-                sym: key.into(),
-            });
+            // Might be other edge cases than callexpr
+            let mut must_use_getter =
+                key.as_str() == "children" || val.is_call() || val.is_member();
+            let key = if cannot_convert_to_ident(&key) {
+                must_use_getter = true;
+                PropName::Computed(ComputedPropName {
+                    span: DUMMY_SP,
+                    expr: key.into(),
+                })
+            } else {
+                PropName::Ident(IdentName {
+                    span: DUMMY_SP,
+                    sym: key.into(),
+                })
+            };
 
-            // Might be other edge cases but callexpr is
-            // the only one I'm seeing
-            let prop = if val.is_call() {
+            let prop = if must_use_getter {
                 Prop::Getter(GetterProp {
                     span: DUMMY_SP,
                     key,
@@ -161,8 +186,7 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
         let mut parsed_prop_slice: Vec<(Atom, Box<Expr>)> = Vec::new();
         for (maybe_key, wrapped_expression) in self.metadata.props.drain(..) {
             self.needs_merge_props = self.needs_merge_props || maybe_key.is_none();
-            let mut raw_expression = grab_inner_expr(wrapped_expression);
-            transform_inner_expression_mut(self.parent_visitor, &mut raw_expression);
+            let raw_expression = grab_inner_expr(wrapped_expression);
             if let Some(key) = maybe_key {
                 parsed_prop_slice.push((key, raw_expression));
             } else {
@@ -239,8 +263,13 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
                     .parsed_props
                     .drain(..)
                     .map(|parse| match parse {
-                        ParsedPropsOrSpread::Props(items) => build_props_oject_expr(items).into(),
-                        ParsedPropsOrSpread::Spread(expr) => expr.into(),
+                        ParsedPropsOrSpread::Props(items) => {
+                            build_props_oject_expr(self.parent_visitor, items).into()
+                        }
+                        ParsedPropsOrSpread::Spread(mut expr) => {
+                            transform_inner_expression_mut(self.parent_visitor, &mut expr, true);
+                            expr.into()
+                        }
                     })
                     .collect(),
             });
@@ -248,8 +277,13 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
         } else {
             // Should have length of 1
             match self.parsed_props.pop() {
-                Some(ParsedPropsOrSpread::Props(items)) => build_props_oject_expr(items).into(),
-                Some(ParsedPropsOrSpread::Spread(expr)) => expr.into(),
+                Some(ParsedPropsOrSpread::Props(items)) => {
+                    build_props_oject_expr(self.parent_visitor, items).into()
+                }
+                Some(ParsedPropsOrSpread::Spread(mut expr)) => {
+                    transform_inner_expression_mut(self.parent_visitor, &mut expr, true);
+                    expr.into()
+                }
                 None => Box::new(Expr::Object(ObjectLit::default())),
             }
         };

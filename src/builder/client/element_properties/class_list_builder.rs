@@ -22,7 +22,7 @@ use crate::{
     helpers::{
         common_into_expressions::{create_double_negated, ident_callee, ident_expr},
         component_helpers::is_falsy_lit,
-        generate_var_names::{generate_effect_arg, generate_el, CLASS_LIST},
+        generate_var_names::{generate_el, CLASS_LIST},
     },
     transform::parent_visitor::ParentVisitor,
 };

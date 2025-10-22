@@ -215,7 +215,7 @@ const template25 = (()=>{
     _$spread(_el$37, _$mergeProps(props, {
         something: ""
     }), false, false);
-    _$insert(_el$36, props.children, _el$37);
+    _$insert(_el$36, ()=>props.children, _el$37);
     return _el$36;
 })();
 const template26 = (()=>{

@@ -178,6 +178,19 @@ mod tests {
 
     #[test]
     fn attribute_expressions_test() {
+        // Individual tests help w/debugging
+        // (1,10),(11,20)...(71,80)
+        (0..=7)
+            .map(|v| (v * 10 + 1, v * 10 + 10))
+            .chain(vec![(81, 89)])
+            .for_each(|(lb, ub)| {
+                std_format_test("attribute_expressions", format!("{lb}_{ub}.jsx").as_str());
+            });
         std_format_test("attribute_expressions", "code.jsx");
+    }
+
+    #[test]
+    fn components_test() {
+        std_format_test("components", "components_test.jsx");
     }
 }

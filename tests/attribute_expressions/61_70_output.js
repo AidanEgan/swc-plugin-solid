@@ -1,0 +1,12 @@
+import { template as _$template } from "solid-js/web";
+var _tmpl$1 = /*#__PURE__*/ _$template("<div quack after>should have space before/after"), _tmpl$2 = /*#__PURE__*/ _$template("<img src>"), _tmpl$3 = /*#__PURE__*/ _$template("<div><img src>"), _tmpl$4 = /*#__PURE__*/ _$template("<img src loading=lazy>", true, false, false), _tmpl$5 = /*#__PURE__*/ _$template("<div><img src loading=lazy>", true, false, false), _tmpl$6 = /*#__PURE__*/ _$template("<iframe src>"), _tmpl$7 = /*#__PURE__*/ _$template("<div><iframe src>"), _tmpl$8 = /*#__PURE__*/ _$template("<iframe src loading=lazy>", true, false, false), _tmpl$9 = /*#__PURE__*/ _$template("<div><iframe src loading=lazy>", true, false, false);
+const template61 = _tmpl$1();
+// this crash it for some reason- */ const template62 = <div bool:quack>really empty</div>;
+const template63 = _tmpl$2();
+const template64 = _tmpl$3();
+const template65 = _tmpl$4();
+const template66 = _tmpl$5();
+const template67 = _tmpl$6();
+const template68 = _tmpl$7();
+const template69 = _tmpl$8();
+const template70 = _tmpl$9();

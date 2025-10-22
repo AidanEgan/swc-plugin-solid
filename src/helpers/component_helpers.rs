@@ -1,5 +1,5 @@
 use swc_core::ecma::{
-    ast::{BigInt, BigIntValue, Expr, JSXElementName, Lit},
+    ast::{BigIntValue, Expr, JSXElementName, JSXMemberExpr, Lit},
     transforms::base::ext::ExprRefExt,
     utils::ExprExt,
 };
@@ -10,10 +10,25 @@ use crate::transform::parent_visitor::ParentVisitor;
 // could be optimized to not recrate all those strings?
 // JSWord???
 
+fn build_member_expr(mem: &JSXMemberExpr, mut string_builder: String) -> String {
+    let mut res = match &mem.obj {
+        swc_core::ecma::ast::JSXObject::JSXMemberExpr(expr) => {
+            build_member_expr(expr.as_ref(), string_builder)
+        }
+        swc_core::ecma::ast::JSXObject::Ident(ident) => {
+            string_builder += ident.sym.as_str();
+            string_builder += ".";
+            string_builder
+        }
+    };
+    res += mem.prop.sym.as_str();
+    res
+}
+
 pub fn get_component_name(name: &JSXElementName) -> String {
     match name {
         JSXElementName::Ident(n) => n.sym.as_str().into(),
-        JSXElementName::JSXMemberExpr(n) => n.prop.sym.as_str().into(),
+        JSXElementName::JSXMemberExpr(n) => build_member_expr(n, "".into()),
         JSXElementName::JSXNamespacedName(n) => {
             format!("{0}:{1}", n.ns.sym.as_str(), n.name.sym.as_str())
         }

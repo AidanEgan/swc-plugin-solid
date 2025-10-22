@@ -1,3 +1,6 @@
 /target
 ^target/
 target
+
+# Used as reference locally
+**/*_output_expected.[t|j]s

@@ -29,6 +29,9 @@ impl ClientJsxElementVisitor {
             .push(Some(PossiblePlaceholders::Expression(data)));
         self.placeholder_count += 1;
     }
+    fn is_empty(&self) -> bool {
+        self.placeholder_count == 0 && self.template.is_empty()
+    }
 }
 
 impl VisitMut for ClientJsxElementVisitor {
@@ -73,10 +76,14 @@ impl VisitMut for ClientJsxElementVisitor {
                 children: node
                     .children
                     .drain(..)
-                    .map(|mut child| {
+                    .filter_map(|mut child| {
                         let mut new_visitor = ClientJsxElementVisitor::new();
                         child.visit_mut_with(&mut new_visitor);
-                        new_visitor
+                        if new_visitor.is_empty() {
+                            None
+                        } else {
+                            Some(new_visitor)
+                        }
                     })
                     .collect(),
                 is_builtin: false,

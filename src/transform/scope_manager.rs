@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use swc_core::{
     atoms::Atom,
-    ecma::ast::{Lit, Pat, VarDeclarator},
+    ecma::ast::{Expr, Lit, Pat, VarDeclarator},
 };
 
 #[derive(Debug, Clone)]
@@ -61,54 +61,53 @@ impl ScopeManager {
         self.declare_variable(import_name, TrackedVariable::Imported);
     }
 
+    fn insert_var(&mut self, some_expr: &Box<Expr>, val: Atom, is_const: bool) {
+        if some_expr.is_arrow() || some_expr.is_fn_expr() {
+            self.declare_variable(val, TrackedVariable::FunctionIdent(is_const));
+            return;
+        }
+        if let Some(other_ident) = some_expr.as_ident() {
+            if self.is_in_scope(&other_ident.sym) {
+                self.declare_variable(val, TrackedVariable::Referred(other_ident.sym.clone()));
+                return;
+            }
+        }
+        if let Some(lit) = some_expr.as_lit() {
+            match lit {
+                Lit::Str(lit_str) => {
+                    self.declare_variable(val, TrackedVariable::Literal(lit_str.value.to_string()));
+                    return;
+                }
+                Lit::Num(lit_num) => {
+                    self.declare_variable(val, TrackedVariable::Literal(lit_num.value.to_string()));
+                    return;
+                }
+                _ => { /* Skip */ }
+            }
+        }
+        // Not really intereseted in some of these
+        if is_const
+            && !(some_expr.is_arrow() || some_expr.is_jsx_element() || some_expr.is_jsx_fragment())
+        {
+            self.declare_variable(val, TrackedVariable::StoredConstant);
+        }
+    }
+
     pub fn add_var(&mut self, declarator: &VarDeclarator, is_const: bool) {
         if let Some(some_expr) = &declarator.init {
             match &declarator.name {
+                Pat::Array(ap) => {
+                    for val in ap.elems.iter().flatten() {
+                        match val {
+                            Pat::Ident(binding_ident) => {
+                                self.insert_var(some_expr, binding_ident.sym.clone(), is_const)
+                            }
+                            _ => { /* TODO: Handle these cases as well */ }
+                        }
+                    }
+                }
                 Pat::Ident(ident) => {
-                    if some_expr.is_arrow() || some_expr.is_fn_expr() {
-                        self.declare_variable(
-                            ident.sym.clone(),
-                            TrackedVariable::FunctionIdent(is_const),
-                        );
-                        return;
-                    }
-                    if let Some(other_ident) = some_expr.as_ident() {
-                        if self.is_in_scope(&other_ident.sym) {
-                            self.declare_variable(
-                                ident.sym.clone(),
-                                TrackedVariable::Referred(other_ident.sym.clone()),
-                            );
-                            return;
-                        }
-                    }
-                    if let Some(lit) = some_expr.as_lit() {
-                        match lit {
-                            Lit::Str(lit_str) => {
-                                self.declare_variable(
-                                    ident.sym.clone(),
-                                    TrackedVariable::Literal(lit_str.value.to_string()),
-                                );
-                                return;
-                            }
-                            Lit::Num(lit_num) => {
-                                self.declare_variable(
-                                    ident.sym.clone(),
-                                    TrackedVariable::Literal(lit_num.value.to_string()),
-                                );
-                                return;
-                            }
-                            _ => { /* Skip */ }
-                        }
-                    }
-                    // Not really intereseted in some of these
-                    if is_const
-                        && !(some_expr.is_arrow()
-                            || some_expr.is_call()
-                            || some_expr.is_jsx_element()
-                            || some_expr.is_jsx_fragment())
-                    {
-                        self.declare_variable(ident.sym.clone(), TrackedVariable::StoredConstant);
-                    }
+                    self.insert_var(some_expr, ident.sym.clone(), is_const);
                 }
                 _ => { /* Handle other patterns */ }
             }

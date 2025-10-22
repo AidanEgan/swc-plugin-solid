@@ -23,7 +23,7 @@ use crate::{
 use swc_core::{
     common::{util::take::Take, SyntaxContext, DUMMY_SP},
     ecma::ast::{
-        ArrayLit, BlockStmt, BlockStmtOrExpr, CallExpr, Callee, Expr, ExprOrSpread, Ident,
+        ArrayLit, BlockStmt, BlockStmtOrExpr, CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit,
     },
 };
 
@@ -153,6 +153,16 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
             }
             None => { /* Do Nothing here */ }
         }
+    } else if parsed_data.template.len() == 1
+        && matches!(parsed_data.template.first(), Some(JsxTemplateKind::Text(_)))
+    {
+        return match parsed_data.template.pop() {
+            Some(JsxTemplateKind::Text(t)) => {
+                let string_expr: Box<Expr> = Expr::Lit(Lit::Str(t.into())).into();
+                BuildResults::Completed(string_expr)
+            }
+            _ => panic!("Template data should be the text variant"),
+        };
     }
 
     let mut templ_ce = false;
@@ -281,7 +291,7 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
                         // TODO TRANSFORM EXPR
                         Some(PossiblePlaceholders::Expression(mut e)) => {
                             let mut t = ClientJsxExprTransformer::new(parent_visitor, true, false);
-                            t.visit_and_wrap_outer_expr(&mut e);
+                            t.visit_and_wrap_outer_expr(&mut e, true);
                             Some(e)
                         }
                         Some(PossiblePlaceholders::Fragment(f)) => Some(

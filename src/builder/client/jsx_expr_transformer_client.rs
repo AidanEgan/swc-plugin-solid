@@ -39,7 +39,7 @@ impl<'a, T: ParentVisitor> ClientJsxExprTransformer<'a, T> {
         }
     }
 
-    pub fn visit_and_wrap_outer_expr(&mut self, node: &mut Box<Expr>) {
+    pub fn visit_and_wrap_outer_expr(&mut self, node: &mut Box<Expr>, wrap_member_exprs: bool) {
         node.visit_mut_with(self);
         if let Some(call_expr) = node.as_mut_call() {
             // Optimize by just calling with callee
@@ -53,6 +53,11 @@ impl<'a, T: ParentVisitor> ClientJsxExprTransformer<'a, T> {
                     BlockStmtOrExpr::Expr(tmp).into(),
                 )));
             }
+        } else if wrap_member_exprs && node.is_member() {
+            let tmp = std::mem::take(node);
+            *node = Box::new(Expr::Arrow(wrap_in_empty_arrow(
+                BlockStmtOrExpr::Expr(tmp).into(),
+            )));
         }
     }
 }
