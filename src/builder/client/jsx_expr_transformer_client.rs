@@ -22,7 +22,9 @@ pub struct ClientJsxExprTransformer<'a, T: ParentVisitor> {
     parent_visitor: &'a mut T,
     transform_call_exprs: bool,
     memo_bin_and_cond: bool,
+    is_custom: bool,
     pub should_wrap_in_effect: bool,
+    pub should_getter: bool,
 }
 
 impl<'a, T: ParentVisitor> ClientJsxExprTransformer<'a, T> {
@@ -30,12 +32,15 @@ impl<'a, T: ParentVisitor> ClientJsxExprTransformer<'a, T> {
         parent_visitor: &'a mut T,
         transform_call_exprs: bool,
         memo_bin_and_cond: bool,
+        is_custom: bool,
     ) -> Self {
         Self {
             parent_visitor,
             transform_call_exprs,
             memo_bin_and_cond,
+            is_custom,
             should_wrap_in_effect: false,
+            should_getter: false,
         }
     }
 
@@ -60,6 +65,13 @@ impl<'a, T: ParentVisitor> ClientJsxExprTransformer<'a, T> {
             )));
         }
     }
+
+    pub fn visit_custom_component(&mut self, node: &mut Box<Expr>) {
+        node.visit_mut_with(self);
+        if node.is_call() || node.is_fn_expr() || node.is_member() {
+            self.should_getter = true;
+        }
+    }
 }
 
 fn remove_expr_from_tree(e: &mut Box<Expr>) -> Box<Expr> {
@@ -74,7 +86,7 @@ impl<'a, T: ParentVisitor> VisitMut for ClientJsxExprTransformer<'a, T> {
             || node.is_arrow()
             || node.is_fn_expr()
             || node.is_member()
-            || (node.is_bin() && node.as_bin().unwrap().op == BinaryOp::In)
+        // Checked in visitor => || (node.is_bin() && node.as_bin().unwrap().op == BinaryOp::In)
         {
             self.should_wrap_in_effect = true;
         }
@@ -90,14 +102,16 @@ impl<'a, T: ParentVisitor> VisitMut for ClientJsxExprTransformer<'a, T> {
 
     // "&&" expressions within JSX need to be memo-ized
     fn visit_mut_bin_expr(&mut self, node: &mut swc_core::ecma::ast::BinExpr) {
-        if self.memo_bin_and_cond {
+        if node.op == BinaryOp::In {
+            self.should_getter = true;
             self.should_wrap_in_effect = true;
         }
         //TODO - needs to check if need to _$memo it -> for el's with no parent
         if self.memo_bin_and_cond
-            && node.left.is_call()
+            && (node.left.is_call() || node.left.is_member())
             && (node.right.is_jsx_element() || node.right.is_jsx_fragment())
         {
+            self.should_wrap_in_effect = true;
             let mut dummy = Box::new(Expr::dummy());
             std::mem::swap(&mut node.left, &mut dummy);
             *node.left = *memoize_bin_cond_expr(dummy);
@@ -107,17 +121,15 @@ impl<'a, T: ParentVisitor> VisitMut for ClientJsxExprTransformer<'a, T> {
 
     // Ternary exprssions within jsx need to be memo-ized
     fn visit_mut_cond_expr(&mut self, node: &mut swc_core::ecma::ast::CondExpr) {
-        if self.memo_bin_and_cond {
-            self.should_wrap_in_effect = true;
-        }
         //TODO - needs to check if need to _$memo it -> for el's with no parent
         if self.memo_bin_and_cond
-            && node.test.is_call()
+            && (node.test.is_call() || node.test.is_member())
             && (node.alt.is_jsx_element()
                 || node.alt.is_jsx_fragment()
                 || node.cons.is_jsx_element()
                 || node.cons.is_jsx_fragment())
         {
+            self.should_wrap_in_effect = true;
             let mut dummy = Box::new(Expr::dummy());
             std::mem::swap(&mut node.test, &mut dummy);
             *node.test = *memoize_bin_cond_expr(dummy);

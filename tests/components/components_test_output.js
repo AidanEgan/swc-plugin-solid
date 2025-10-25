@@ -1,6 +1,7 @@
 import { template as _$template } from "solid-js/web";
 import { createComponent as _$createComponent } from "solid-js/web";
 import { insert as _$insert } from "solid-js/web";
+import { memo as _$memo } from "solid-js/web";
 import { mergeProps as _$mergeProps } from "solid-js/web";
 import { use as _$use } from "solid-js/web";
 var _tmpl$1 = /*#__PURE__*/ _$template("<div>Hello"), _tmpl$2 = /*#__PURE__*/ _$template("<div>"), _tmpl$3 = /*#__PURE__*/ _$template("<div>From Parent"), _tmpl$4 = /*#__PURE__*/ _$template("<div> | <!> | <!> | <!> | <!> | "), _tmpl$5 = /*#__PURE__*/ _$template("<div> | <!> | <!> | "), _tmpl$6 = /*#__PURE__*/ _$template("<div> | <!> |  |  | <!> | "), _tmpl$7 = /*#__PURE__*/ _$template("<span>1"), _tmpl$8 = /*#__PURE__*/ _$template("<span>2"), _tmpl$9 = /*#__PURE__*/ _$template("<span>3");
@@ -50,11 +51,9 @@ const template = (props)=>{
                 typeof _ref$1 === "function" ? _ref$1(r$) : props.ref = r$;
             },
             get children () {
-                return (()=>{
-                    var _el$6 = _tmpl$2();
-                    _$insert(_el$6, content);
-                    return _el$6;
-                })();
+                var _el$6 = _tmpl$2();
+                _$insert(_el$6, content);
+                return _el$6;
             }
         })), null);
         _$insert(_el$3, _$createComponent(Context.Consumer, {
@@ -62,9 +61,7 @@ const template = (props)=>{
                 var _ref$1 = props.consumerRef();
                 typeof _ref$1 === "function" && _ref$1(r$);
             },
-            get children () {
-                return (context)=>context;
-            }
+            children: (context)=>context
         }), null);
         return _el$3;
     })();
@@ -93,10 +90,7 @@ const template3 = _$createComponent(Child, {
 });
 const [s, set] = createSignal();
 const template4 = _$createComponent(Child, {
-    ref (r$) {
-        var _ref$1 = set;
-        typeof _ref$1 === "function" ? _ref$1(r$) : set = r$;
-    },
+    ref: set,
     get children () {
         return _tmpl$2();
     }
@@ -114,23 +108,21 @@ const template6 = _$createComponent(For, {
     get each () {
         return state.list;
     },
-    fallback: ()=>_$createComponent(Loading, {}),
-    get children () {
-        return (item)=>_$createComponent(Show, {
-                get when () {
-                    return state.condition;
-                },
-                get children () {
-                    return item;
-                }
-            });
-    }
+    get fallback () {
+        return _$createComponent(Loading, {});
+    },
+    children: (item)=>_$createComponent(Show, {
+            get when () {
+                return state.condition;
+            },
+            children: item
+        })
 });
 const template7 = _$createComponent(Child, {
     get children () {
         return [
             _tmpl$2(),
-            state.dynamic
+            _$memo(()=>state.dynamic)
         ];
     }
 });
@@ -143,89 +135,59 @@ const template8 = _$createComponent(Child, {
     }
 });
 const template9 = _$createComponent(_garbage, {
-    get children () {
-        return "Hi";
-    }
+    children: "Hi"
 });
 const template10 = (()=>{
     var _el$12 = _tmpl$4(), _el$13 = _el$12.firstChild, _el$14 = _el$13.nextSibling, _el$14 = _el$13.nextSibling, _el$16 = _el$14.nextSibling, _el$16 = _el$14.nextSibling, _el$18 = _el$16.nextSibling, _el$18 = _el$16.nextSibling, _el$20 = _el$18.nextSibling, _el$20 = _el$18.nextSibling;
     _$insert(_el$12, _$createComponent(Link, {
-        get children () {
-            return "new";
-        }
+        children: "new"
     }), _el$13);
     _$insert(_el$12, _$createComponent(Link, {
-        get children () {
-            return "comments";
-        }
+        children: "comments"
     }), _el$14);
     _$insert(_el$12, _$createComponent(Link, {
-        get children () {
-            return "show";
-        }
+        children: "show"
     }), _el$16);
     _$insert(_el$12, _$createComponent(Link, {
-        get children () {
-            return "ask";
-        }
+        children: "ask"
     }), _el$18);
     _$insert(_el$12, _$createComponent(Link, {
-        get children () {
-            return "jobs";
-        }
+        children: "jobs"
     }), _el$20);
     _$insert(_el$12, _$createComponent(Link, {
-        get children () {
-            return "submit";
-        }
+        children: "submit"
     }), null);
     return _el$12;
 })();
 const template11 = (()=>{
     var _el$22 = _tmpl$5(), _el$23 = _el$22.firstChild, _el$24 = _el$23.nextSibling, _el$24 = _el$23.nextSibling, _el$26 = _el$24.nextSibling, _el$26 = _el$24.nextSibling;
     _$insert(_el$22, _$createComponent(Link, {
-        get children () {
-            return "new";
-        }
+        children: "new"
     }), _el$23);
     _$insert(_el$22, _$createComponent(Link, {
-        get children () {
-            return "comments";
-        }
+        children: "comments"
     }), _el$24);
     _$insert(_el$22, _$createComponent(Link, {
-        get children () {
-            return "show";
-        }
+        children: "show"
     }), _el$24);
     _$insert(_el$22, _$createComponent(Link, {
-        get children () {
-            return "ask";
-        }
+        children: "ask"
     }), _el$26);
     _$insert(_el$22, _$createComponent(Link, {
-        get children () {
-            return "jobs";
-        }
+        children: "jobs"
     }), _el$26);
     _$insert(_el$22, _$createComponent(Link, {
-        get children () {
-            return "submit";
-        }
+        children: "submit"
     }), null);
     return _el$22;
 })();
 const template12 = (()=>{
     var _el$28 = _tmpl$6(), _el$29 = _el$28.firstChild, _el$30 = _el$29.nextSibling, _el$30 = _el$29.nextSibling, _el$32 = _el$30.nextSibling, _el$33 = _el$32.nextSibling, _el$34 = _el$33.nextSibling, _el$34 = _el$33.nextSibling;
     _$insert(_el$28, _$createComponent(Link, {
-        get children () {
-            return "comments";
-        }
+        children: "comments"
     }), _el$30);
     _$insert(_el$28, _$createComponent(Link, {
-        get children () {
-            return "show";
-        }
+        children: "show"
     }), _el$34);
     return _el$28;
 })();
@@ -291,7 +253,9 @@ const template22 = _$createComponent(Component, {
     }
 });
 const template23 = _$createComponent(Component, {
-    disabled: "t" in test,
+    get disabled () {
+        return "t" in test;
+    },
     get children () {
         return "t" in test && "true";
     }
@@ -308,7 +272,7 @@ const template25 = _$createComponent(Component, {
 });
 const template26 = [
     _$createComponent(Component, {
-        when: ()=>{
+        get when () {
             const foo = test();
             if ("t" in foo) {
                 return foo;
@@ -316,18 +280,22 @@ const template26 = [
         }
     }),
     _$createComponent(Component, {
-        when: (val = 123)=>{
-            return val * 2;
+        get when () {
+            return ((val = 123)=>{
+                return val * 2;
+            })();
         }
     })
 ];
 const template27 = _$createComponent(Component, {
-    when: ()=>prop.red ? "red" : "green"
+    get when() {
+      return prop.red ? "red" : "green";
+    }
 });
 class Template28 {
     render() {
         return _$createComponent(Component, {
-            when: ()=>{
+            get when () {
                 const foo = this.value;
                 if ("key" in foo) {
                     return foo;
@@ -370,7 +338,9 @@ class Template29 extends ParentComponent {
         get method () {
             return this.method;
         },
-        comp: ()=>_$createComponent(this.another, {})
+        get comp () {
+            return _$createComponent(this.another, {});
+        }
     });
     fieldArrow = ()=>_$createComponent(this.component, {
             get method () {
@@ -386,10 +356,7 @@ class Template29 extends ParentComponent {
     };
 }
 const template30 = _$createComponent(Comp, {
-    ref (r$) {
-        var _ref$1 = binding;
-        typeof _ref$1 === "function" ? _ref$1(r$) : binding = r$;
-    }
+    ref: binding
 });
 const template31 = _$createComponent(Comp, {
     ref (r$) {
@@ -404,10 +371,7 @@ const template32 = _$createComponent(Comp, {
     }
 });
 const template33 = _$createComponent(Comp, {
-    ref (r$) {
-        var _ref$1 = refConst;
-        typeof _ref$1 === "function" ? _ref$1(r$) : refConst = r$;
-    }
+    ref: refConst
 });
 const template34 = _$createComponent(Comp, {
     ref (r$) {

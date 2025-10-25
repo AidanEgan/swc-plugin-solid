@@ -10,7 +10,7 @@ const EFFECT_ARG: &str = "_p$";
 
 // Imported values
 const TEMPLATE: &str = "_$template";
-const MEMO: &str = "_&memo";
+
 const CREATE_COMPONENT: &str = "_$createComponent";
 const MERGE_PROPS: &str = "_$mergeProps";
 const ADD_EVENT_LISTENER: &str = "_$addEventListener";
@@ -28,6 +28,7 @@ pub const CLASS_LIST: &str = "_$classList";
 pub const SET_ATTRIBUTE: &str = "_$setAttribute";
 pub const SET_BOOLEAN_ATTRIBUTE: &str = "_$setBoolAttribute";
 pub const USE: &str = "_$use";
+pub const MEMO: &str = "_$memo";
 
 pub fn generate_template_name(id: usize) -> Atom {
     format!("{0}{1}", TMPL, id).into()
@@ -52,9 +53,6 @@ pub fn generate_import_name(name: Atom) -> Atom {
 }
 pub fn generate_ref(cnt: usize) -> Atom {
     format!("{0}{1}", REF, cnt).into()
-}
-pub fn generate_memo() -> Atom {
-    MEMO.into()
 }
 
 pub fn generate_merge_props() -> Atom {

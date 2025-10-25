@@ -16,15 +16,16 @@ use crate::{
         },
         parser_types::{JsxFragmentMetadata, PossiblePlaceholders},
     },
-    helpers::generate_var_names::{generate_effect, generate_insert, generate_template_name},
+    helpers::generate_var_names::{
+        generate_create_component_name, generate_effect, generate_insert, generate_template_name,
+        MEMO,
+    },
     transform::parent_visitor::ParentVisitor,
 };
 
 use swc_core::{
-    common::{util::take::Take, SyntaxContext, DUMMY_SP},
-    ecma::ast::{
-        ArrayLit, BlockStmt, BlockStmtOrExpr, CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit,
-    },
+    common::{SyntaxContext, DUMMY_SP},
+    ecma::ast::{ArrayLit, BlockStmt, BlockStmtOrExpr, Callee, Expr, ExprOrSpread, Ident, Lit},
 };
 
 pub enum BuildResults {
@@ -79,28 +80,40 @@ fn add_opening(
     *templ_string += ">";
 }
 
-fn memo_call_expr_mut(res: &mut BuildResults) {
+pub fn memo_expr_mut(res: &mut BuildResults) -> bool {
     if let BuildResults::Completed(expr) = res {
-        if let Expr::Call(call_expr) = &mut **expr {
+        if let Some(call_expr) = expr.as_mut_call() {
             if let Callee::Expr(inner_expr) = &mut call_expr.callee {
-                if call_expr.args.is_empty() {
-                    let mut dummy = Box::new(Expr::dummy());
-                    std::mem::swap(inner_expr, &mut dummy);
-                    *expr = Box::new(wrap_with_memo(dummy).into());
+                if let Some(id) = inner_expr.as_ident() {
+                    // Ignore list
+                    if id.sym == generate_create_component_name() {
+                        return false;
+                    };
                 }
-            } else {
-                let mut dummy = CallExpr::dummy();
-                std::mem::swap(call_expr, &mut dummy);
-                let new_expr = Box::new(dummy.into());
+                if call_expr.args.is_empty() {
+                    *expr = Box::new(wrap_with_memo(std::mem::take(inner_expr)).into());
+                    return true;
+                }
+                let new_expr = Box::new((std::mem::take(call_expr)).into());
                 *expr = Box::new(
                     wrap_with_memo(Box::new(
                         wrap_in_empty_arrow(BlockStmtOrExpr::Expr(new_expr).into()).into(),
                     ))
                     .into(),
                 );
+                return true;
             }
+        } else if expr.is_member() {
+            *expr = Box::new(
+                wrap_with_memo(Box::new(
+                    wrap_in_empty_arrow(BlockStmtOrExpr::Expr(std::mem::take(expr)).into()).into(),
+                ))
+                .into(),
+            );
+            return true;
         }
     }
+    false
 }
 
 fn handle_fragment_chunks<T: ParentVisitor>(
@@ -109,7 +122,9 @@ fn handle_fragment_chunks<T: ParentVisitor>(
 ) -> BuildResults {
     if frag.children.len() == 1 {
         let mut build_res = build_js_from_client_jsx(frag.children.remove(0), parent_visitor);
-        memo_call_expr_mut(&mut build_res);
+        if memo_expr_mut(&mut build_res) {
+            parent_visitor.add_import(MEMO.into());
+        };
         return build_res;
     }
     let arr = ArrayLit {
@@ -119,7 +134,9 @@ fn handle_fragment_chunks<T: ParentVisitor>(
             .into_iter()
             .map(|child| {
                 let mut build_res = build_js_from_client_jsx(child, parent_visitor);
-                memo_call_expr_mut(&mut build_res);
+                if memo_expr_mut(&mut build_res) {
+                    parent_visitor.add_import(MEMO.into());
+                };
                 Some(ExprOrSpread {
                     spread: None,
                     expr: standard_build_res_wrappings(build_res),
@@ -290,7 +307,8 @@ pub fn build_js_from_client_jsx<T: ParentVisitor>(
                         }
                         // TODO TRANSFORM EXPR
                         Some(PossiblePlaceholders::Expression(mut e)) => {
-                            let mut t = ClientJsxExprTransformer::new(parent_visitor, true, false);
+                            let mut t =
+                                ClientJsxExprTransformer::new(parent_visitor, true, false, false);
                             t.visit_and_wrap_outer_expr(&mut e, true);
                             Some(e)
                         }

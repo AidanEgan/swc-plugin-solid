@@ -3,9 +3,10 @@ use swc_core::{
     common::{util::take::Take, BytePos, Spanned, SyntaxContext, DUMMY_SP},
     ecma::{
         ast::{
-            ArrayLit, BlockStmt, CallExpr, ComputedPropName, Expr, ExprOrSpread, Function,
-            GetterProp, Ident, IdentName, JSXAttrOrSpread, JSXAttrValue, JSXExpr, KeyValueProp,
-            Lit, MethodProp, ObjectLit, Param, Pat, Prop, PropName, PropOrSpread, ReturnStmt, Stmt,
+            ArrayLit, BinaryOp, BlockStmt, CallExpr, ComputedPropName, Expr, ExprOrSpread,
+            Function, GetterProp, Ident, IdentName, JSXAttrOrSpread, JSXAttrValue, JSXExpr,
+            KeyValueProp, Lit, MethodProp, ObjectLit, Param, Pat, Prop, PropName, PropOrSpread,
+            ReturnStmt, Stmt,
         },
         visit::VisitMutWith,
     },
@@ -16,7 +17,7 @@ use crate::{
         client::{
             element_properties::ref_statement_builder::create_ref_statements,
             jsx_expr_builder_client::{
-                build_js_from_client_jsx, standard_build_res_wrappings, BuildResults,
+                build_js_from_client_jsx, memo_expr_mut, standard_build_res_wrappings, BuildResults,
             },
             jsx_expr_transformer_client::ClientJsxExprTransformer,
             jsx_parser_client::ClientJsxElementVisitor,
@@ -26,11 +27,48 @@ use crate::{
     helpers::{
         common_into_expressions::{cannot_convert_to_ident, ident_callee, ident_expr, ident_name},
         generate_var_names::{
-            generate_create_component_name, generate_merge_props, generate_ref_raw, REF_RAW,
+            generate_create_component_name, generate_merge_props, generate_ref_raw, MEMO, REF_RAW,
         },
+        parent_visitor_helpers::check_var_name_in_scope,
     },
-    transform::parent_visitor::ParentVisitor,
+    transform::{parent_visitor::ParentVisitor, scope_manager::TrackedVariable},
 };
+
+enum InnerIifeRes {
+    NoChange(Box<Expr>),
+    InnerExpr(Box<Expr>),
+    InnerStmts(Vec<Stmt>),
+}
+
+fn grab_iife_mut(mut expr: Box<Expr>) -> InnerIifeRes {
+    if let Some(call_expr) = expr.as_mut_call() {
+        if call_expr.args.is_empty() {
+            if let Some(inner_expr) = call_expr.callee.as_mut_expr() {
+                if let Some(inner_expr) = inner_expr.as_mut_paren().map(|p| &mut p.expr) {
+                    if let Some(inner_arrow) = inner_expr.as_mut_arrow() {
+                        if inner_arrow.params.is_empty() {
+                            return match &mut *inner_arrow.body {
+                                swc_core::ecma::ast::BlockStmtOrExpr::BlockStmt(block_stmt) => {
+                                    InnerIifeRes::InnerStmts(std::mem::take(&mut block_stmt.stmts))
+                                }
+                                swc_core::ecma::ast::BlockStmtOrExpr::Expr(expr) => {
+                                    InnerIifeRes::InnerExpr(std::mem::take(expr))
+                                }
+                            };
+                        }
+                    } else if let Some(inner_fn) = inner_expr.as_mut_fn_expr() {
+                        if inner_fn.function.params.is_empty() && inner_fn.function.body.is_some() {
+                            return InnerIifeRes::InnerStmts(std::mem::take(
+                                &mut inner_fn.function.body.as_mut().unwrap().stmts,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    InnerIifeRes::NoChange(expr)
+}
 
 fn grab_inner_expr(raw: JSXAttrOrSpread) -> (Box<Expr>, Option<BytePos>) {
     match raw {
@@ -56,7 +94,7 @@ fn transform_inner_expression_mut<T: ParentVisitor>(
     to_visit: &mut Box<Expr>,
     wrap_member_exprs: bool,
 ) {
-    let mut attribute_visitor = ClientJsxExprTransformer::new(parent_visitor, true, true);
+    let mut attribute_visitor = ClientJsxExprTransformer::new(parent_visitor, true, true, true);
     attribute_visitor.visit_and_wrap_outer_expr(to_visit, wrap_member_exprs);
 }
 
@@ -88,27 +126,56 @@ fn build_ref_expr(stmts: Vec<Stmt>) -> Prop {
 
 fn build_props_oject_expr<T: ParentVisitor>(
     parent_visitor: &mut T,
+    needs_children_getter: bool,
     props: Vec<ParsedProp>,
 ) -> Box<Expr> {
     let mut statements: Vec<Stmt> = vec![];
+    let mut static_ref = false;
     let props = props
         .into_iter()
         .map(|parsed| {
+            let mut needs_getter_prop = false;
             let (key, mut val, is_static) = (parsed.name, parsed.expr, parsed.is_static);
             // Apply correct transformation
             match key.as_str() {
                 REF_RAW => {
                     // Ref statements change a bit differently
-                    let mut attribute_visitor =
-                        ClientJsxExprTransformer::new(parent_visitor, false, false);
-                    val.visit_mut_with(&mut attribute_visitor);
+                    if let Some(ident) = val.as_ident() {
+                        match check_var_name_in_scope(parent_visitor, &ident.sym) {
+                            Ok(_) => {
+                                static_ref = true;
+                            }
+                            Err(reason) => {
+                                match reason {
+                                    Some(TrackedVariable::StoredConstant) => {
+                                        static_ref = true;
+                                    }
+                                    Some(TrackedVariable::Imported) => {
+                                        static_ref = true;
+                                    }
+                                    _ => { /* Skip */ }
+                                }
+                            }
+                        }
+                    } else {
+                        let mut attribute_visitor =
+                            ClientJsxExprTransformer::new(parent_visitor, false, false, true);
+                        val.visit_mut_with(&mut attribute_visitor);
+                    }
+                    //
                 }
                 "children" => { /* Intentionally do nothing */ }
                 // Standard expr transformation
-                _ => transform_inner_expression_mut(parent_visitor, &mut val, false),
+                _ => {
+                    let mut attribute_visitor =
+                        ClientJsxExprTransformer::new(parent_visitor, false, true, true);
+                    attribute_visitor.visit_custom_component(&mut val);
+                    needs_getter_prop =
+                        attribute_visitor.should_getter || val.is_call() || val.is_array();
+                }
             }
             // Certain exprs need to be transformed
-            if key.as_str() == REF_RAW {
+            if !static_ref && key.as_str() == REF_RAW {
                 // No transformation done, ownership of expr moves back here
                 if let Some(returned_val) =
                     // "Other tuple val returns '_use' usage not needed here"
@@ -119,9 +186,50 @@ fn build_props_oject_expr<T: ParentVisitor>(
                     return build_ref_expr(std::mem::take(&mut statements)).into();
                 }
             }
+
+            let mut must_use_getter = false;
+
+            // IIFEs are optimized I guess
+            let val = if !is_static {
+                match grab_iife_mut(val) {
+                    InnerIifeRes::InnerStmts(stmts) => {
+                        let key = if cannot_convert_to_ident(&key) {
+                            PropName::Computed(ComputedPropName {
+                                span: DUMMY_SP,
+                                expr: key.into(),
+                            })
+                        } else {
+                            PropName::Ident(IdentName {
+                                span: DUMMY_SP,
+                                sym: key.into(),
+                            })
+                        };
+                        let prop = Prop::Getter(GetterProp {
+                            span: DUMMY_SP,
+                            key,
+                            type_ann: None,
+                            body: Some(BlockStmt {
+                                span: DUMMY_SP,
+                                ctxt: SyntaxContext::empty(),
+                                stmts: stmts,
+                            }),
+                        });
+                        return PropOrSpread::Prop(Box::new(prop));
+                    }
+                    InnerIifeRes::InnerExpr(expr) => {
+                        must_use_getter = true;
+                        expr
+                    }
+                    InnerIifeRes::NoChange(expr) => expr,
+                }
+            } else {
+                val
+            };
             // Might be other edge cases than callexpr
-            let must_use_getter =
-                key.as_str() == "children" || (!is_static && (val.is_call() || val.is_member()));
+            must_use_getter = must_use_getter
+                || (key.as_str() == "children"
+                    && (needs_children_getter || val.is_call() || val.is_array()))
+                || (!is_static && needs_getter_prop);
             let key = if cannot_convert_to_ident(&key) {
                 PropName::Computed(ComputedPropName {
                     span: DUMMY_SP,
@@ -176,6 +284,7 @@ pub struct ClientCustomComponentBuilder<'a, T: ParentVisitor> {
     metadata: JsxCustomComponentMetadata<ClientJsxElementVisitor>,
     parsed_props: Vec<ParsedPropsOrSpread>,
     needs_merge_props: bool,
+    needs_children_getter: bool,
 }
 
 impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
@@ -188,6 +297,7 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
             metadata,
             parsed_props: Vec::new(),
             needs_merge_props: false,
+            needs_children_getter: false,
         }
     }
 
@@ -226,7 +336,7 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
             return;
         }
 
-        let mut children: Vec<Box<Expr>> = self
+        let mut children: Vec<BuildResults> = self
             .metadata
             .children
             .drain(..)
@@ -234,20 +344,30 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
                 let mut build = build_js_from_client_jsx(child, self.parent_visitor);
                 if let BuildResults::Completed(c) = &mut build {
                     let mut child_visitor =
-                        ClientJsxExprTransformer::new(self.parent_visitor, false, true);
-                    c.visit_mut_with(&mut child_visitor);
+                        ClientJsxExprTransformer::new(self.parent_visitor, false, true, true);
+                    child_visitor.visit_custom_component(c);
+                    self.needs_children_getter =
+                        self.needs_children_getter || child_visitor.should_getter;
                     // TODO -> Repeat on need revisit? May not be poss
                 }
-                standard_build_res_wrappings(build)
+                build
             })
             .collect();
 
         let wrapped = if children.len() == 1 {
-            children.pop().unwrap()
+            standard_build_res_wrappings(children.pop().unwrap())
         } else {
             let arr = ArrayLit {
                 span: DUMMY_SP,
-                elems: children.into_iter().map(|x| Some(x.into())).collect(),
+                elems: children
+                    .into_iter()
+                    .map(|mut x| {
+                        if memo_expr_mut(&mut x) {
+                            self.parent_visitor.add_import(MEMO.into());
+                        }
+                        Some(standard_build_res_wrappings(x).into())
+                    })
+                    .collect(),
             };
             standard_build_res_wrappings(BuildResults::Arr(arr))
         };
@@ -285,9 +405,12 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
                     .parsed_props
                     .drain(..)
                     .map(|parse| match parse {
-                        ParsedPropsOrSpread::Props(items) => {
-                            build_props_oject_expr(self.parent_visitor, items).into()
-                        }
+                        ParsedPropsOrSpread::Props(items) => build_props_oject_expr(
+                            self.parent_visitor,
+                            self.needs_children_getter,
+                            items,
+                        )
+                        .into(),
                         ParsedPropsOrSpread::Spread(mut expr) => {
                             transform_inner_expression_mut(self.parent_visitor, &mut expr, true);
                             expr.into()
@@ -300,7 +423,8 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
             // Should have length of 1
             match self.parsed_props.pop() {
                 Some(ParsedPropsOrSpread::Props(items)) => {
-                    build_props_oject_expr(self.parent_visitor, items).into()
+                    build_props_oject_expr(self.parent_visitor, self.needs_children_getter, items)
+                        .into()
                 }
                 Some(ParsedPropsOrSpread::Spread(mut expr)) => {
                     transform_inner_expression_mut(self.parent_visitor, &mut expr, true);
@@ -322,6 +446,7 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
         let create_component = generate_create_component_name();
         self.parent_visitor
             .add_import(create_component.as_str().into());
+        self.needs_children_getter = false;
         Box::new(Expr::Call(CallExpr {
             span: DUMMY_SP,
             ctxt: SyntaxContext::empty(),

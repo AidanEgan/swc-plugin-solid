@@ -12,6 +12,7 @@ use crate::{
     helpers::{
         common_into_expressions::{ident_callee, ident_expr, ident_name},
         generate_var_names::{generate_el, generate_ref, USE},
+        parent_visitor_helpers::check_var_name_in_scope,
     },
     transform::{parent_visitor::ParentVisitor, scope_manager::TrackedVariable},
 };
@@ -160,7 +161,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
         // Can be inlined
         if element_count.is_some() {
             if let Some(n) = ref_expr.as_ident() {
-                match self.check_class_name_in_scope(&n.sym) {
+                match check_var_name_in_scope(self.parent_visitor, &n.sym) {
                     Ok(val) => {
                         self.direct_template_inserts.push(("ref".into(), val));
                         return;

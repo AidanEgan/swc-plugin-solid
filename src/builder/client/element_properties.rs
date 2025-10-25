@@ -46,12 +46,10 @@ use crate::{
     constants::properties::get_bool_attr,
     helpers::{
         common_into_expressions::{create_double_negated, ident_callee, ident_expr},
-        component_helpers::is_falsy,
-        generate_var_names::{
-            generate_effect_arg, generate_el, generate_merge_props, generate_v, SPREAD, USE,
-        },
+        generate_var_names::{generate_el, generate_merge_props, generate_v, SPREAD, USE},
+        parent_visitor_helpers::check_var_name_in_scope,
     },
-    transform::{parent_visitor::ParentVisitor, scope_manager::TrackedVariable},
+    transform::parent_visitor::ParentVisitor,
 };
 
 struct WrapEffect {
@@ -120,28 +118,6 @@ pub struct ElementPropertiesBuilder<'a, T: ParentVisitor> {
 // Implements many fns for different types of properties
 // See 'element properties' folder
 impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
-    fn check_class_name_in_scope(
-        &mut self,
-        initial_val: &Atom,
-    ) -> Result<String, Option<TrackedVariable>> {
-        let mut val = initial_val;
-        loop {
-            match self.parent_visitor.get_var_if_in_scope(val) {
-                Some(TrackedVariable::FunctionIdent(is_const)) => {
-                    break Err(Some(TrackedVariable::FunctionIdent(*is_const)))
-                }
-                Some(TrackedVariable::Literal(l)) => break Ok(l.clone()),
-                Some(TrackedVariable::Referred(r)) => {
-                    val = r;
-                }
-                Some(TrackedVariable::StoredConstant) => {
-                    break Err(Some(TrackedVariable::StoredConstant))
-                }
-                Some(TrackedVariable::Imported) => break Err(Some(TrackedVariable::Imported)),
-                None => break Err(None),
-            }
-        }
-    }
     fn effect_or_inline_or_expr(
         &mut self,
         data: PossibleEffectStatement,
@@ -156,7 +132,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                 }
                 e => {
                     let inline = if let Some(ident) = e.as_ident() {
-                        self.check_class_name_in_scope(&ident.sym).ok()
+                        check_var_name_in_scope(self.parent_visitor, &ident.sym).ok()
                     } else {
                         None
                     };
@@ -219,6 +195,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                                 self.parent_visitor,
                                 transform_call_exprs,
                                 false, // Memo bin + cond only in custom compnents I think
+                                false,
                             );
                             if transform_call_exprs {
                                 sub_visitor.visit_and_wrap_outer_expr(&mut expr, true);
@@ -668,7 +645,8 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                     ClassBuilderVariants::Computed(expr) => {
                         if expr.is_ident() {
                             let id = expr.as_ident().unwrap();
-                            let val_in_scope = self.check_class_name_in_scope(&id.sym);
+                            let val_in_scope =
+                                check_var_name_in_scope(self.parent_visitor, &id.sym);
                             if let Ok(val_in_scope) = val_in_scope {
                                 Expr::Lit(Lit::Str(val_in_scope.into())).into()
                             } else {
@@ -695,7 +673,8 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                             is_computed = true;
                             if expr.is_ident() {
                                 let id = expr.as_ident().unwrap();
-                                let val_in_scope = self.check_class_name_in_scope(&id.sym);
+                                let val_in_scope =
+                                    check_var_name_in_scope(self.parent_visitor, &id.sym);
                                 if let Ok(val_in_scope) = val_in_scope {
                                     lit_builder += val_in_scope.as_str();
                                     lit_builder += " ";
@@ -850,7 +829,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                 let mut lone_expr = merge_props_args.pop().unwrap();
                 if !self.parent_visitor.has_static_marker(lone_expr.span_lo()) {
                     let mut little_visitor =
-                        ClientJsxExprTransformer::new(self.parent_visitor, true, false);
+                        ClientJsxExprTransformer::new(self.parent_visitor, true, false, false);
                     little_visitor.visit_and_wrap_outer_expr(&mut lone_expr, true);
                     if little_visitor.should_wrap_in_effect {
                         self.parent_visitor

@@ -247,7 +247,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                                                     // Effect it -> in glob
                                                     style_obj_builder.props.push(prop);
                                                 } else {
-                                                    let mut visitor = ClientJsxExprTransformer::new(self.parent_visitor, false, false);
+                                                    let mut visitor = ClientJsxExprTransformer::new(self.parent_visitor, false, false, false);
                                                     key_value_prop.value.visit_mut_with(&mut visitor);
                                                     // Should always succeed
                                                     let kv = prop.expect_prop().expect_key_value();
@@ -272,6 +272,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                                         if !style_obj_builder.props.is_empty() {
                                             let mut little_visitor = ClientJsxExprTransformer::new(
                                                 self.parent_visitor,
+                                                false,
                                                 false,
                                                 false,
                                             );

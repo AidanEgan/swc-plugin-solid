@@ -7,9 +7,7 @@ use swc_core::{
     },
 };
 
-use crate::helpers::{
-    common_into_expressions::create_double_negated, generate_var_names::generate_memo,
-};
+use crate::helpers::{common_into_expressions::create_double_negated, generate_var_names::MEMO};
 
 pub fn own_box_expr(old_expr: &mut Box<Expr>) -> Box<Expr> {
     let mut dummy = Box::new(Expr::dummy());
@@ -82,7 +80,7 @@ pub fn wrap_with_memo(expr: Box<Expr>) -> CallExpr {
     CallExpr {
         span: DUMMY_SP,
         ctxt: SyntaxContext::empty(),
-        callee: Callee::Expr(name_as_expr(generate_memo())),
+        callee: Callee::Expr(name_as_expr(MEMO.into())),
         args: vec![expr.into()],
         type_args: None,
     }

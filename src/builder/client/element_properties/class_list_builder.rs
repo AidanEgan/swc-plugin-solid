@@ -189,7 +189,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
     ) {
         if needs_class_list(&obj_expr.props) {
             let mut little_visitor =
-                ClientJsxExprTransformer::new(self.parent_visitor, false, false);
+                ClientJsxExprTransformer::new(self.parent_visitor, false, false, false);
             obj_expr.visit_mut_with(&mut little_visitor);
             if should_effect && little_visitor.should_wrap_in_effect {
                 let v_cnt = *self.parent_visitor.v_count();
@@ -221,7 +221,7 @@ impl<'a, T: ParentVisitor> ElementPropertiesBuilder<'a, T> {
                     prop.value,
                 );
                 let mut little_visitor =
-                    ClientJsxExprTransformer::new(self.parent_visitor, false, false);
+                    ClientJsxExprTransformer::new(self.parent_visitor, false, false, false);
                 val.visit_mut_with(&mut little_visitor);
                 if should_effect && little_visitor.should_wrap_in_effect {
                     let v_cnt = *self.parent_visitor.v_count();
