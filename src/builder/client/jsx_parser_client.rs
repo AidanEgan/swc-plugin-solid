@@ -8,7 +8,7 @@ use crate::helpers::component_helpers::{
     get_component_name, is_ce, is_import_node, is_solid_component,
 };
 use crate::helpers::opening_element_helpers::parse_attrs;
-use swc_core::ecma::ast::{Expr, JSXElement, JSXExpr, JSXFragment, Lit};
+use swc_core::ecma::ast::{Expr, JSXElement, JSXElementName, JSXExpr, JSXFragment, Lit};
 use swc_core::ecma::visit::{VisitMut, VisitMutWith};
 
 // Logic for elements and fragments will be similar - use this for both
@@ -67,8 +67,9 @@ impl VisitMut for ClientJsxElementVisitor {
     }
 
     fn visit_mut_jsx_element(&mut self, node: &mut JSXElement) {
+        let is_member_expr = matches!(node.opening.name, JSXElementName::JSXMemberExpr(_));
         let name = get_component_name(&node.opening.name);
-        let is_custom_component = is_solid_component(&name);
+        let is_custom_component = is_member_expr || is_solid_component(&name);
         if is_custom_component {
             let custom_component = JsxCustomComponentMetadata::<ClientJsxElementVisitor> {
                 value: name,

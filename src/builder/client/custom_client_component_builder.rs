@@ -1,6 +1,6 @@
 use swc_core::{
     atoms::Atom,
-    common::{util::take::Take, SyntaxContext, DUMMY_SP},
+    common::{util::take::Take, BytePos, Spanned, SyntaxContext, DUMMY_SP},
     ecma::{
         ast::{
             ArrayLit, BlockStmt, CallExpr, ComputedPropName, Expr, ExprOrSpread, Function,
@@ -32,19 +32,22 @@ use crate::{
     transform::parent_visitor::ParentVisitor,
 };
 
-fn grab_inner_expr(raw: JSXAttrOrSpread) -> Box<Expr> {
+fn grab_inner_expr(raw: JSXAttrOrSpread) -> (Box<Expr>, Option<BytePos>) {
     match raw {
         JSXAttrOrSpread::JSXAttr(jsxattr) => match jsxattr.value {
-            Some(JSXAttrValue::Lit(l)) => Box::new(l.into()),
-            Some(JSXAttrValue::JSXElement(e)) => Box::new(e.into()),
-            Some(JSXAttrValue::JSXFragment(f)) => Box::new(f.into()),
-            Some(JSXAttrValue::JSXExprContainer(c)) => match c.expr {
-                JSXExpr::JSXEmptyExpr(_) => Box::new(Expr::dummy()),
-                JSXExpr::Expr(expr) => expr,
-            },
-            None => Box::new(Expr::Lit(Lit::Bool(true.into()))),
+            Some(JSXAttrValue::Lit(l)) => (Box::new(l.into()), None),
+            Some(JSXAttrValue::JSXElement(e)) => (Box::new(e.into()), None),
+            Some(JSXAttrValue::JSXFragment(f)) => (Box::new(f.into()), None),
+            Some(JSXAttrValue::JSXExprContainer(c)) => {
+                let span_lo = c.span_lo();
+                match c.expr {
+                    JSXExpr::JSXEmptyExpr(_) => (Box::new(Expr::default()), None),
+                    JSXExpr::Expr(expr) => (expr, Some(span_lo)),
+                }
+            }
+            None => (Box::new(Expr::Lit(Lit::Bool(true.into()))), None),
         },
-        JSXAttrOrSpread::SpreadElement(spread_element) => spread_element.expr,
+        JSXAttrOrSpread::SpreadElement(spread_element) => (spread_element.expr, None),
     }
 }
 
@@ -85,12 +88,13 @@ fn build_ref_expr(stmts: Vec<Stmt>) -> Prop {
 
 fn build_props_oject_expr<T: ParentVisitor>(
     parent_visitor: &mut T,
-    props: Vec<(Atom, Box<Expr>)>,
+    props: Vec<ParsedProp>,
 ) -> Box<Expr> {
     let mut statements: Vec<Stmt> = vec![];
     let props = props
         .into_iter()
-        .map(|(key, mut val)| {
+        .map(|parsed| {
+            let (key, mut val, is_static) = (parsed.name, parsed.expr, parsed.is_static);
             // Apply correct transformation
             match key.as_str() {
                 REF_RAW => {
@@ -116,10 +120,9 @@ fn build_props_oject_expr<T: ParentVisitor>(
                 }
             }
             // Might be other edge cases than callexpr
-            let mut must_use_getter =
-                key.as_str() == "children" || val.is_call() || val.is_member();
+            let must_use_getter =
+                key.as_str() == "children" || (!is_static && (val.is_call() || val.is_member()));
             let key = if cannot_convert_to_ident(&key) {
-                must_use_getter = true;
                 PropName::Computed(ComputedPropName {
                     span: DUMMY_SP,
                     expr: key.into(),
@@ -157,8 +160,14 @@ fn build_props_oject_expr<T: ParentVisitor>(
     }))
 }
 
+struct ParsedProp {
+    name: Atom,
+    expr: Box<Expr>,
+    is_static: bool,
+}
+
 enum ParsedPropsOrSpread {
-    Props(Vec<(Atom, Box<Expr>)>),
+    Props(Vec<ParsedProp>),
     Spread(Box<Expr>),
 }
 
@@ -183,12 +192,21 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
     }
 
     fn parse_all_props(&mut self) {
-        let mut parsed_prop_slice: Vec<(Atom, Box<Expr>)> = Vec::new();
+        let mut parsed_prop_slice: Vec<ParsedProp> = Vec::new();
         for (maybe_key, wrapped_expression) in self.metadata.props.drain(..) {
             self.needs_merge_props = self.needs_merge_props || maybe_key.is_none();
-            let raw_expression = grab_inner_expr(wrapped_expression);
+            let (raw_expression, container_span) = grab_inner_expr(wrapped_expression);
             if let Some(key) = maybe_key {
-                parsed_prop_slice.push((key, raw_expression));
+                let is_static = if let Some(span_lo) = container_span {
+                    self.parent_visitor.has_static_marker(span_lo)
+                } else {
+                    false
+                };
+                parsed_prop_slice.push(ParsedProp {
+                    name: key,
+                    expr: raw_expression,
+                    is_static,
+                });
             } else {
                 if !parsed_prop_slice.is_empty() {
                     self.parsed_props
@@ -233,7 +251,11 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
             };
             standard_build_res_wrappings(BuildResults::Arr(arr))
         };
-        let new_entry = ("children".into(), wrapped);
+        let new_entry = ParsedProp {
+            name: "children".into(),
+            expr: wrapped,
+            is_static: false,
+        };
         match self.parsed_props.last_mut() {
             Some(ParsedPropsOrSpread::Props(p)) => {
                 p.push(new_entry);

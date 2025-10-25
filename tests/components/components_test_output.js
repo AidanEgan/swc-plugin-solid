@@ -1,11 +1,9 @@
 import { template as _$template } from "solid-js/web";
 import { createComponent as _$createComponent } from "solid-js/web";
-import { effect as _$effect } from "solid-js/web";
 import { insert as _$insert } from "solid-js/web";
 import { mergeProps as _$mergeProps } from "solid-js/web";
-import { setAttribute as _$setAttribute } from "solid-js/web";
 import { use as _$use } from "solid-js/web";
-var _tmpl$1 = /*#__PURE__*/ _$template("<div>Hello"), _tmpl$2 = /*#__PURE__*/ _$template("<div>"), _tmpl$3 = /*#__PURE__*/ _$template("<div>From Parent"), _tmpl$4 = /*#__PURE__*/ _$template("<_garbage>Hi"), _tmpl$5 = /*#__PURE__*/ _$template("<div> | <!> | <!> | <!> | <!> | "), _tmpl$6 = /*#__PURE__*/ _$template("<div> | <!> | <!> | "), _tmpl$7 = /*#__PURE__*/ _$template("<div> | <!> |  |  | <!> | "), _tmpl$8 = /*#__PURE__*/ _$template("<span>1"), _tmpl$9 = /*#__PURE__*/ _$template("<span>2"), _tmpl$10 = /*#__PURE__*/ _$template("<span>3"), _tmpl$11 = /*#__PURE__*/ _$template("<this.component>"), _tmpl$12 = /*#__PURE__*/ _$template("<this.another>");
+var _tmpl$1 = /*#__PURE__*/ _$template("<div>Hello"), _tmpl$2 = /*#__PURE__*/ _$template("<div>"), _tmpl$3 = /*#__PURE__*/ _$template("<div>From Parent"), _tmpl$4 = /*#__PURE__*/ _$template("<div> | <!> | <!> | <!> | <!> | "), _tmpl$5 = /*#__PURE__*/ _$template("<div> | <!> | <!> | "), _tmpl$6 = /*#__PURE__*/ _$template("<div> | <!> |  |  | <!> | "), _tmpl$7 = /*#__PURE__*/ _$template("<span>1"), _tmpl$8 = /*#__PURE__*/ _$template("<span>2"), _tmpl$9 = /*#__PURE__*/ _$template("<span>3");
 import { Show, binding } from "somewhere";
 function refFn() {}
 const refConst = null;
@@ -76,9 +74,7 @@ const template2 = _$createComponent(Child, {
     get dynamic () {
         return state.data;
     },
-    get stale () {
-        return state.data;
-    },
+    stale: state.data,
     handleClick: clickHandler,
     get ["hyphen-ated"] () {
         return state.data;
@@ -146,88 +142,92 @@ const template8 = _$createComponent(Child, {
         ];
     }
 });
-const template9 = _tmpl$4();
+const template9 = _$createComponent(_garbage, {
+    get children () {
+        return "Hi";
+    }
+});
 const template10 = (()=>{
-    var _el$14 = _tmpl$5(), _el$15 = _el$14.firstChild, _el$16 = _el$15.nextSibling, _el$16 = _el$15.nextSibling, _el$18 = _el$16.nextSibling, _el$18 = _el$16.nextSibling, _el$20 = _el$18.nextSibling, _el$20 = _el$18.nextSibling, _el$22 = _el$20.nextSibling, _el$22 = _el$20.nextSibling;
-    _$insert(_el$14, _$createComponent(Link, {
+    var _el$12 = _tmpl$4(), _el$13 = _el$12.firstChild, _el$14 = _el$13.nextSibling, _el$14 = _el$13.nextSibling, _el$16 = _el$14.nextSibling, _el$16 = _el$14.nextSibling, _el$18 = _el$16.nextSibling, _el$18 = _el$16.nextSibling, _el$20 = _el$18.nextSibling, _el$20 = _el$18.nextSibling;
+    _$insert(_el$12, _$createComponent(Link, {
         get children () {
             return "new";
         }
-    }), _el$15);
-    _$insert(_el$14, _$createComponent(Link, {
+    }), _el$13);
+    _$insert(_el$12, _$createComponent(Link, {
         get children () {
             return "comments";
+        }
+    }), _el$14);
+    _$insert(_el$12, _$createComponent(Link, {
+        get children () {
+            return "show";
         }
     }), _el$16);
-    _$insert(_el$14, _$createComponent(Link, {
-        get children () {
-            return "show";
-        }
-    }), _el$18);
-    _$insert(_el$14, _$createComponent(Link, {
+    _$insert(_el$12, _$createComponent(Link, {
         get children () {
             return "ask";
         }
-    }), _el$20);
-    _$insert(_el$14, _$createComponent(Link, {
+    }), _el$18);
+    _$insert(_el$12, _$createComponent(Link, {
         get children () {
             return "jobs";
         }
-    }), _el$22);
-    _$insert(_el$14, _$createComponent(Link, {
+    }), _el$20);
+    _$insert(_el$12, _$createComponent(Link, {
         get children () {
             return "submit";
         }
     }), null);
-    return _el$14;
+    return _el$12;
 })();
 const template11 = (()=>{
-    var _el$24 = _tmpl$6(), _el$25 = _el$24.firstChild, _el$26 = _el$25.nextSibling, _el$26 = _el$25.nextSibling, _el$28 = _el$26.nextSibling, _el$28 = _el$26.nextSibling;
-    _$insert(_el$24, _$createComponent(Link, {
+    var _el$22 = _tmpl$5(), _el$23 = _el$22.firstChild, _el$24 = _el$23.nextSibling, _el$24 = _el$23.nextSibling, _el$26 = _el$24.nextSibling, _el$26 = _el$24.nextSibling;
+    _$insert(_el$22, _$createComponent(Link, {
         get children () {
             return "new";
         }
-    }), _el$25);
-    _$insert(_el$24, _$createComponent(Link, {
+    }), _el$23);
+    _$insert(_el$22, _$createComponent(Link, {
         get children () {
             return "comments";
         }
-    }), _el$26);
-    _$insert(_el$24, _$createComponent(Link, {
+    }), _el$24);
+    _$insert(_el$22, _$createComponent(Link, {
         get children () {
             return "show";
         }
-    }), _el$26);
-    _$insert(_el$24, _$createComponent(Link, {
+    }), _el$24);
+    _$insert(_el$22, _$createComponent(Link, {
         get children () {
             return "ask";
         }
-    }), _el$28);
-    _$insert(_el$24, _$createComponent(Link, {
+    }), _el$26);
+    _$insert(_el$22, _$createComponent(Link, {
         get children () {
             return "jobs";
         }
-    }), _el$28);
-    _$insert(_el$24, _$createComponent(Link, {
+    }), _el$26);
+    _$insert(_el$22, _$createComponent(Link, {
         get children () {
             return "submit";
         }
     }), null);
-    return _el$24;
+    return _el$22;
 })();
 const template12 = (()=>{
-    var _el$30 = _tmpl$7(), _el$31 = _el$30.firstChild, _el$32 = _el$31.nextSibling, _el$32 = _el$31.nextSibling, _el$34 = _el$32.nextSibling, _el$35 = _el$34.nextSibling, _el$36 = _el$35.nextSibling, _el$36 = _el$35.nextSibling;
-    _$insert(_el$30, _$createComponent(Link, {
+    var _el$28 = _tmpl$6(), _el$29 = _el$28.firstChild, _el$30 = _el$29.nextSibling, _el$30 = _el$29.nextSibling, _el$32 = _el$30.nextSibling, _el$33 = _el$32.nextSibling, _el$34 = _el$33.nextSibling, _el$34 = _el$33.nextSibling;
+    _$insert(_el$28, _$createComponent(Link, {
         get children () {
             return "comments";
         }
-    }), _el$32);
-    _$insert(_el$30, _$createComponent(Link, {
+    }), _el$30);
+    _$insert(_el$28, _$createComponent(Link, {
         get children () {
             return "show";
         }
-    }), _el$36);
-    return _el$30;
+    }), _el$34);
+    return _el$28;
 })();
 class Template13 {
     render() {
@@ -261,18 +261,18 @@ const Template16 = _$createComponent(Component, _$mergeProps({
 const Template17 = _$createComponent(Pre, {
     get children () {
         return [
+            _tmpl$7(),
             _tmpl$8(),
-            _tmpl$9(),
-            _tmpl$10()
+            _tmpl$9()
         ];
     }
 });
 const Template18 = _$createComponent(Pre, {
     get children () {
         return [
+            _tmpl$7(),
             _tmpl$8(),
-            _tmpl$9(),
-            _tmpl$10()
+            _tmpl$9()
         ];
     }
 });
@@ -339,50 +339,50 @@ class Template28 {
 class Template29 extends ParentComponent {
     constructor(){
         super();
-        (()=>{
-            var _el$51 = _tmpl$11();
-            _$effect(()=>_$setAttribute(_el$51, "method", this.method));
-            return _el$51;
-        })();
+        _$createComponent(this.component, {
+            get method () {
+                return this.method;
+            }
+        });
     }
     get get() {
-        (()=>{
-            var _el$52 = _tmpl$11();
-            _$effect(()=>_$setAttribute(_el$52, "method", this.method));
-            return _el$52;
-        })();
+        _$createComponent(this.component, {
+            get method () {
+                return this.method;
+            }
+        });
     }
     set set(v) {
-        (()=>{
-            var _el$53 = _tmpl$11();
-            _$effect(()=>_$setAttribute(_el$53, "method", this.method));
-            return _el$53;
-        })();
+        _$createComponent(this.component, {
+            get method () {
+                return this.method;
+            }
+        });
     }
     method() {
-        (()=>{
-            var _el$54 = _tmpl$11();
-            _$effect(()=>_$setAttribute(_el$54, "method", this.method));
-            return _el$54;
-        })();
+        _$createComponent(this.component, {
+            get method () {
+                return this.method;
+            }
+        });
     }
-    field = (()=>{
-        var _el$55 = _tmpl$11();
-        _$setAttribute(_el$55, "comp", _tmpl$12());
-        _$effect(()=>_$setAttribute(_el$55, "method", this.method));
-        return _el$55;
-    })();
-    fieldArrow = ()=>(()=>{
-            var _el$57 = _tmpl$11();
-            _$effect(()=>_$setAttribute(_el$57, "method", this.method));
-            return _el$57;
-        })();
+    field = _$createComponent(this.component, {
+        get method () {
+            return this.method;
+        },
+        comp: ()=>_$createComponent(this.another, {})
+    });
+    fieldArrow = ()=>_$createComponent(this.component, {
+            get method () {
+                return this.method;
+            }
+        });
     fieldFunction = function() {
-        (()=>{
-            var _el$58 = _tmpl$11();
-            _$effect(()=>_$setAttribute(_el$58, "method", this.method));
-            return _el$58;
-        })();
+        _$createComponent(this.component, {
+            get method () {
+                return this.method;
+            }
+        });
     };
 }
 const template30 = _$createComponent(Comp, {

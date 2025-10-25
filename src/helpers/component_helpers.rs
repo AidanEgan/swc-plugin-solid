@@ -40,7 +40,9 @@ pub fn get_component_name(name: &JSXElementName) -> String {
 // with a capital letter
 pub fn is_solid_component(nm: &str) -> bool {
     if !nm.is_empty() {
-        nm.as_bytes()[0].is_ascii_uppercase()
+        // Uppercase chars are considered custom
+        // As well as 'garbage' like "$" or "_"
+        !nm.as_bytes()[0].is_ascii_lowercase()
     } else {
         false
     }
