@@ -216,7 +216,7 @@ const Template14 = _$createComponent(Component, {
         return data();
     }
 });
-const Template15 = _$createComponent(Component, _$mergeProps(props));
+const Template15 = _$createComponent(Component, props);
 const Template16 = _$createComponent(Component, _$mergeProps({
     something: something
 }, props));
@@ -288,8 +288,8 @@ const template26 = [
     })
 ];
 const template27 = _$createComponent(Component, {
-    get when() {
-      return prop.red ? "red" : "green";
+    get when () {
+        return prop.red ? "red" : "green";
     }
 });
 class Template28 {

@@ -8,7 +8,7 @@ use swc_core::{
             KeyValueProp, Lit, MethodProp, ObjectLit, Param, Pat, Prop, PropName, PropOrSpread,
             ReturnStmt, Stmt,
         },
-        visit::VisitMutWith,
+        visit::{Visit, VisitMutWith, VisitWith},
     },
 };
 
@@ -33,6 +33,21 @@ use crate::{
     },
     transform::{parent_visitor::ParentVisitor, scope_manager::TrackedVariable},
 };
+
+struct MergePropMicroVisitor {
+    should_merge_prop: bool,
+}
+
+impl Visit for MergePropMicroVisitor {
+    fn visit_call_expr(&mut self, node: &CallExpr) {
+        self.should_merge_prop = true;
+        // Don't need to visit more
+    }
+    fn visit_member_expr(&mut self, node: &swc_core::ecma::ast::MemberExpr) {
+        self.should_merge_prop = true;
+        // Don't need to visit more
+    }
+}
 
 enum InnerIifeRes {
     NoChange(Box<Expr>),
@@ -303,8 +318,8 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
 
     fn parse_all_props(&mut self) {
         let mut parsed_prop_slice: Vec<ParsedProp> = Vec::new();
+        let is_single_arg = self.metadata.props.len() == 1;
         for (maybe_key, wrapped_expression) in self.metadata.props.drain(..) {
-            self.needs_merge_props = self.needs_merge_props || maybe_key.is_none();
             let (raw_expression, container_span) = grab_inner_expr(wrapped_expression);
             if let Some(key) = maybe_key {
                 let is_static = if let Some(span_lo) = container_span {
@@ -318,6 +333,16 @@ impl<'a, T: ParentVisitor> ClientCustomComponentBuilder<'a, T> {
                     is_static,
                 });
             } else {
+                self.needs_merge_props = self.needs_merge_props
+                    || (if is_single_arg {
+                        let mut mpmv = MergePropMicroVisitor {
+                            should_merge_prop: false,
+                        };
+                        raw_expression.visit_with(&mut mpmv);
+                        mpmv.should_merge_prop
+                    } else {
+                        true
+                    });
                 if !parsed_prop_slice.is_empty() {
                     self.parsed_props
                         .push(ParsedPropsOrSpread::Props(parsed_prop_slice))
